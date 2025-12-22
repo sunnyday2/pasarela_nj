@@ -1,0 +1,147 @@
+/*
+ * Copyright (C) 2025 Pasarela Orchestrator
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+@import "@adyen/adyen-web/styles/adyen.css";
+
+:root {
+  color-scheme: light;
+  --bg: #0b1220;
+  --card: #121b2e;
+  --text: #e7eefc;
+  --muted: rgba(231, 238, 252, 0.7);
+  --border: rgba(231, 238, 252, 0.12);
+  --accent: #6ea8fe;
+  --danger: #ff6b6b;
+  --success: #22c55e;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: radial-gradient(1000px 700px at 30% 10%, rgba(110, 168, 254, 0.20), transparent),
+    radial-gradient(900px 700px at 80% 20%, rgba(34, 197, 94, 0.10), transparent),
+    var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 18px 60px;
+}
+
+.card {
+  background: rgba(18, 27, 46, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  backdrop-filter: blur(6px);
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.col {
+  flex: 1 1 320px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(110, 168, 254, 0.15);
+  color: var(--text);
+}
+
+button.primary {
+  background: rgba(110, 168, 254, 0.30);
+  border-color: rgba(110, 168, 254, 0.45);
+}
+
+button.danger {
+  background: rgba(255, 107, 107, 0.22);
+  border-color: rgba(255, 107, 107, 0.40);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.status-success {
+  color: var(--success);
+}
+
+.status-failed {
+  color: var(--danger);
+}

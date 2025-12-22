@@ -1,0 +1,12 @@
+{
+  "name": "pasarela-orchestrator",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:backend": "mvn -Dmaven.repo.local=.m2/repository -f backend/pom.xml spring-boot:run",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test": "mvn -Dmaven.repo.local=.m2/repository -f backend/pom.xml test && npm --prefix frontend run lint"
+  }
+}

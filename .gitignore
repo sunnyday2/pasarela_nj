@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+.env
+
+backend/target
+backend/data/*
+!backend/data/.gitkeep
+.m2
