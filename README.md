@@ -31,6 +31,8 @@ El proveedor se decide **antes** de entregar `checkoutConfig` al frontend porque
 cp .env.example .env
 ```
 
+Opcional: si el primer arranque tarda más, podés ajustar el timeout del healthcheck en ms con `BACKEND_HEALTH_TIMEOUT_MS`.
+
 2) Instalar dependencias frontend:
 
 ```bash

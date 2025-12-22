@@ -96,6 +96,12 @@ const backendHost = normalizeBackendHost(backendBindAddress);
 const backendHostForUrl = formatHostForUrl(backendHost);
 const backendBaseUrl = `http://${backendHostForUrl}:${backendPort}`;
 const backendHealthUrl = `${backendBaseUrl}/actuator/health`;
+const defaultBackendHealthTimeoutMs = 120_000;
+const backendHealthTimeoutMs = Number(env.BACKEND_HEALTH_TIMEOUT_MS ?? defaultBackendHealthTimeoutMs);
+const effectiveBackendHealthTimeoutMs =
+  Number.isFinite(backendHealthTimeoutMs) && backendHealthTimeoutMs > 0
+    ? backendHealthTimeoutMs
+    : defaultBackendHealthTimeoutMs;
 
 const mvnCmd = process.platform === "win32" ? "mvn.cmd" : "mvn";
 const backendArgs = ["-Dmaven.repo.local=.m2/repository", "-f", "backend/pom.xml", "spring-boot:run"];
@@ -128,7 +134,7 @@ backend.on("exit", (code) => {
 });
 
 try {
-  await waitForHealth(backendHealthUrl, 60_000);
+  await waitForHealth(backendHealthUrl, effectiveBackendHealthTimeoutMs);
 } catch (e) {
   process.stdout.write(`[backend] healthcheck failed: ${e instanceof Error ? e.message : String(e)}\n`);
   shutdown(1);
