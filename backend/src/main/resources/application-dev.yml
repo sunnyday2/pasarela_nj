@@ -1,0 +1,3 @@
+pasarela:
+  flyway:
+    auto-repair: true
