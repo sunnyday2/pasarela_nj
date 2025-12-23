@@ -28,7 +28,14 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(resolveAllowedOrigins(appProperties.frontend().baseUrl()));
         config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "X-Api-Key", "X-Request-Id"));
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Idempotency-Key",
+                "X-Api-Key",
+                "X-Merchant-Api-Key",
+                "X-Request-Id"
+        ));
         config.setExposedHeaders(List.of("X-Request-Id"));
         config.setAllowCredentials(false);
 

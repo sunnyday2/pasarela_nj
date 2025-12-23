@@ -24,6 +24,7 @@ import java.util.Optional;
 @Component
 public class MerchantApiKeyAuthenticationFilter extends OncePerRequestFilter {
     public static final String HEADER = "X-Api-Key";
+    public static final String ALIAS_HEADER = "X-Merchant-Api-Key";
 
     private final MerchantAuthService merchantAuthService;
 
@@ -41,6 +42,9 @@ public class MerchantApiKeyAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String apiKey = request.getHeader(HEADER);
+        if (apiKey == null || apiKey.isBlank()) {
+            apiKey = request.getHeader(ALIAS_HEADER);
+        }
         if (apiKey != null && !apiKey.isBlank()) {
             Optional<MerchantPrincipal> merchant = merchantAuthService.authenticate(apiKey);
             if (merchant.isPresent()) {
@@ -55,4 +59,3 @@ public class MerchantApiKeyAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 }
-

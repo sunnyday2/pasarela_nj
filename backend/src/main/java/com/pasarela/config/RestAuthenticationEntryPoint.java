@@ -34,10 +34,10 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         String requestId = MDC.get(RequestIdFilter.MDC_KEY);
         String path = request.getRequestURI();
         String message = path != null && path.startsWith("/api/payment-intents")
-                ? "Invalid X-Api-Key"
+                ? "Missing/Invalid X-Api-Key (or X-Merchant-Api-Key)"
                 : "Unauthorized";
 
-        ApiErrorResponse body = new ApiErrorResponse("UNAUTHORIZED", message, requestId);
+        ApiErrorResponse body = new ApiErrorResponse("UNAUTHORIZED", "UNAUTHORIZED", message, requestId);
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json");
         response.getWriter().write(objectMapper.writeValueAsString(body));

@@ -119,7 +119,7 @@ public class PaymentIntentController {
 
     private MerchantPrincipal requireMerchant(MerchantPrincipal merchant) {
         if (merchant == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid X-Api-Key");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing/Invalid X-Api-Key (or X-Merchant-Api-Key)");
         }
         return merchant;
     }

@@ -8,7 +8,15 @@ const BACKEND_BASE_URL = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_AP
   ""
 );
 
-const FORWARDED_HEADERS = ["authorization", "content-type", "x-api-key", "idempotency-key", "x-request-id", "accept"];
+const FORWARDED_HEADERS = [
+  "authorization",
+  "content-type",
+  "x-api-key",
+  "x-merchant-api-key",
+  "idempotency-key",
+  "x-request-id",
+  "accept"
+];
 
 function buildForwardHeaders(request: Request): Headers {
   const headers = new Headers();
