@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
@@ -45,6 +46,31 @@ async function waitForHealth(url, timeoutMs) {
   throw new Error(`Backend did not become healthy in ${timeoutMs}ms: ${url}`);
 }
 
+function isPortAvailable(port, host) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", (err) => {
+      if (err && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
+        resolve(false);
+      } else {
+        resolve(false);
+      }
+    });
+    server.listen(port, host, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+async function findAvailablePort(startPort, host, attempts = 3) {
+  for (let i = 0; i < attempts; i += 1) {
+    const port = startPort + i;
+    if (await isPortAvailable(port, host)) return port;
+  }
+  return null;
+}
+
 function spawnWithPrefix(command, args, options, prefix) {
   const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
   prefixLines(child.stdout, prefix);
@@ -54,6 +80,10 @@ function spawnWithPrefix(command, args, options, prefix) {
 
 const envFromFile = readEnvFile(path.join(rootDir, ".env"));
 const env = { ...process.env, ...Object.fromEntries(Object.entries(envFromFile).filter(([k]) => process.env[k] === undefined)) };
+
+if (!env.SPRING_PROFILES_ACTIVE) {
+  env.SPRING_PROFILES_ACTIVE = "dev";
+}
 
 function isValidBase64Key32(s) {
   if (!(typeof s === "string" && /^[A-Za-z0-9+/]+={0,2}$/.test(s) && s.length % 4 === 0)) return false;
@@ -103,6 +133,33 @@ const effectiveBackendHealthTimeoutMs =
     ? backendHealthTimeoutMs
     : defaultBackendHealthTimeoutMs;
 
+const preferredFrontendPortRaw = Number(env.FRONTEND_PORT || env.PORT || "3000");
+const preferredFrontendPort = Number.isFinite(preferredFrontendPortRaw) && preferredFrontendPortRaw > 0 ? preferredFrontendPortRaw : 3000;
+const frontendHost = "127.0.0.1";
+const resolvedFrontendPort = await findAvailablePort(preferredFrontendPort, frontendHost, 5);
+
+if (!resolvedFrontendPort) {
+  process.stdout.write(
+    `[frontend] No available port starting at ${preferredFrontendPort}. Free a port or set FRONTEND_PORT (e.g. lsof -i :${preferredFrontendPort}).\n`
+  );
+  process.exit(1);
+}
+
+if (resolvedFrontendPort !== preferredFrontendPort) {
+  process.stdout.write(
+    `[frontend] Port ${preferredFrontendPort} in use. Falling back to ${resolvedFrontendPort}.\n`
+  );
+}
+
+const defaultFrontendOrigins = new Set([
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://[::1]:3000"
+]);
+if (!env.FRONTEND_BASE_URL || defaultFrontendOrigins.has(env.FRONTEND_BASE_URL)) {
+  env.FRONTEND_BASE_URL = `http://localhost:${resolvedFrontendPort}`;
+}
+
 const mvnCmd = process.platform === "win32" ? "mvn.cmd" : "mvn";
 const backendArgs = ["-Dmaven.repo.local=.m2/repository", "-f", "backend/pom.xml", "spring-boot:run"];
 
@@ -143,7 +200,8 @@ try {
 
 const frontendEnv = {
   ...env,
-  API_BASE_URL: env.API_BASE_URL || backendBaseUrl
+  API_BASE_URL: env.API_BASE_URL || backendBaseUrl,
+  PORT: String(resolvedFrontendPort)
 };
 
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";

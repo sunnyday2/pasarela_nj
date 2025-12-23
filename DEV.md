@@ -31,3 +31,16 @@ rm backend/data/pasarela.db
 ```
 
 Al reiniciar, Flyway recrea las tablas desde cero.
+
+## Frontend port / EADDRINUSE
+
+`npm run dev` usa `scripts/dev.mjs` y verifica si el puerto 3000 esta ocupado.
+Si lo esta, intenta 3001 (y siguientes) automaticamente y ajusta `FRONTEND_BASE_URL` para CORS.
+
+Si queres fijar el puerto:
+
+```bash
+FRONTEND_PORT=3001 npm run dev
+```
+
+Si no hay puertos libres en el rango, el script aborta con un mensaje indicando como liberar el puerto.
