@@ -17,6 +17,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.Map;
@@ -24,8 +25,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "app.payments.mode=auto")
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class PaymentIntentNoProvidersTest {
     @Autowired
     private TestRestTemplate restTemplate;

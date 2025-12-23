@@ -150,6 +150,7 @@ if (resolvedFrontendPort !== preferredFrontendPort) {
     `[frontend] Port ${preferredFrontendPort} in use. Falling back to ${resolvedFrontendPort}.\n`
   );
 }
+process.stdout.write(`[frontend] Using port ${resolvedFrontendPort}.\n`);
 
 const defaultFrontendOrigins = new Set([
   "http://localhost:3000",

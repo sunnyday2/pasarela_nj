@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:sqlite:file:memdb?mode=memory&cache=shared
+    url: jdbc:sqlite:file:memdb_${random.uuid}?mode=memory&cache=shared
     driver-class-name: org.sqlite.JDBC
     hikari:
       connection-init-sql: PRAGMA foreign_keys=ON
@@ -24,6 +24,8 @@ management:
         include: health,info
 
 app:
+  payments:
+    mode: demo
   providers:
     adyen:
       hmacKey: NAyhesJG7rrNDRTEck3YiAZ11/nX6Bg08zqRBjPn4L8=
