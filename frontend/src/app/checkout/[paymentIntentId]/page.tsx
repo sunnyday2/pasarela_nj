@@ -123,6 +123,10 @@ export default function CheckoutPage() {
   const routingReasonCode = data?.paymentIntent.routingReasonCode;
 
   const checkoutConfig = data?.checkoutConfig || {};
+  const demoType = typeof checkoutConfig.type === "string" ? checkoutConfig.type : "";
+  const isDemo = provider === "DEMO" || demoType === "DEMO";
+  const demoCheckoutUrl = typeof checkoutConfig.checkoutUrl === "string" ? checkoutConfig.checkoutUrl : "";
+  const providerLabel = isDemo ? "DEMO" : provider;
 
   return (
     <div className="card">
@@ -164,7 +168,7 @@ export default function CheckoutPage() {
               <div className="row" style={{ justifyContent: "space-between" }}>
                 <div>
                   <div className="muted">Provider</div>
-                  <div className="pill">{provider}</div>
+                  <div className="pill">{providerLabel || "-"}</div>
                 </div>
                 <div>
                   <div className="muted">Status</div>
@@ -202,7 +206,20 @@ export default function CheckoutPage() {
 
           <div className="col">
             <div className="card">
-              {provider === "STRIPE" ? (
+              {isDemo ? (
+                <div>
+                  <p className="muted" style={{ marginTop: 0 }}>
+                    Modo demo activo. No hay proveedor externo configurado.
+                  </p>
+                  {demoCheckoutUrl ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <a href={demoCheckoutUrl} target="_blank" rel="noreferrer">
+                        Abrir checkout demo
+                      </a>
+                    </p>
+                  ) : null}
+                </div>
+              ) : provider === "STRIPE" ? (
                 <StripeCheckout
                   publishableKey={String(checkoutConfig.publishableKey || "")}
                   clientSecret={String(checkoutConfig.clientSecret || "")}

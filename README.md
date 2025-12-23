@@ -45,6 +45,10 @@ cd frontend && npm install
 npm run dev
 ```
 
+## Dev notes
+
+Ver `DEV.md` para Flyway repair, demo payments mode y troubleshooting de puertos.
+
 ### API base / CORS
 
 - Por defecto el frontend llama a `/api/*` y Next.js lo proxya al backend (sin CORS).

@@ -4,7 +4,7 @@
  */
 
 export type ProviderPreference = "AUTO" | "STRIPE" | "ADYEN";
-export type PaymentProvider = "STRIPE" | "ADYEN";
+export type PaymentProvider = "STRIPE" | "ADYEN" | "DEMO";
 export type PaymentStatus =
   | "CREATED"
   | "REQUIRES_PAYMENT_METHOD"

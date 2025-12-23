@@ -10,6 +10,8 @@ import com.pasarela.api.ApiException;
 import com.pasarela.application.routing.ProviderHealthService;
 import com.pasarela.application.routing.ProviderPreference;
 import com.pasarela.application.routing.RoutingEngine;
+import com.pasarela.config.AppProperties;
+import com.pasarela.config.PaymentsMode;
 import com.pasarela.domain.model.PaymentProvider;
 import com.pasarela.domain.model.PaymentStatus;
 import com.pasarela.infrastructure.checkout.CheckoutConfigStore;
@@ -53,6 +55,8 @@ public class PaymentIntentService {
     private final IdempotencyService idempotencyService;
     private final ProviderHealthService providerHealthService;
     private final ObjectMapper objectMapper;
+    private final AppProperties properties;
+    private final PaymentsMode paymentsMode;
 
     public PaymentIntentService(
             MerchantRepository merchantRepository,
@@ -63,7 +67,9 @@ public class PaymentIntentService {
             CheckoutConfigStore checkoutConfigStore,
             IdempotencyService idempotencyService,
             ProviderHealthService providerHealthService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AppProperties properties,
+            PaymentsMode paymentsMode
     ) {
         this.merchantRepository = merchantRepository;
         this.paymentIntentRepository = paymentIntentRepository;
@@ -74,6 +80,8 @@ public class PaymentIntentService {
         this.idempotencyService = idempotencyService;
         this.providerHealthService = providerHealthService;
         this.objectMapper = objectMapper;
+        this.properties = properties;
+        this.paymentsMode = paymentsMode;
     }
 
     @Transactional
@@ -183,14 +191,23 @@ public class PaymentIntentService {
     ) {
         String currency = command.currency().toUpperCase();
 
-        RoutingEngine.RoutingResult routing = routingEngine.decide(
-                merchant,
-                paymentIntentId,
-                command.amountMinor(),
-                currency,
-                command.providerPreference(),
-                excludedProviders
-        );
+        if (!paymentsMode.isDemo() && !isStripeConfigured() && !isAdyenConfigured()) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No payment providers configured. Set STRIPE_* or ADYEN_* or enable demo mode (PAYMENTS_MODE=demo)."
+            );
+        }
+
+        RoutingEngine.RoutingResult routing = paymentsMode.isDemo()
+                ? demoRoutingResult(paymentIntentId, command.amountMinor(), currency)
+                : routingEngine.decide(
+                        merchant,
+                        paymentIntentId,
+                        command.amountMinor(),
+                        currency,
+                        command.providerPreference(),
+                        excludedProviders
+                );
 
         PaymentIntentEntity pi = new PaymentIntentEntity();
         pi.setId(paymentIntentId);
@@ -371,6 +388,36 @@ public class PaymentIntentService {
         } catch (Exception e) {
             return cmd.amountMinor() + ":" + cmd.currency() + ":" + cmd.providerPreference();
         }
+    }
+
+    private RoutingEngine.RoutingResult demoRoutingResult(UUID paymentIntentId, long amountMinor, String currency) {
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(Map.of(
+                    "mode", "DEMO",
+                    "currency", currency,
+                    "amountMinor", amountMinor,
+                    "computedAt", Instant.now().toString()
+            ));
+        } catch (Exception e) {
+            json = "{\"mode\":\"DEMO\"}";
+        }
+        return new RoutingEngine.RoutingResult(PaymentProvider.DEMO, "DEMO_MODE", json);
+    }
+
+    private boolean isStripeConfigured() {
+        if (properties.providers() == null || properties.providers().stripe() == null) return false;
+        String secretKey = properties.providers().stripe().secretKey();
+        String publishableKey = properties.providers().stripe().publishableKey();
+        return secretKey != null && !secretKey.isBlank() && publishableKey != null && !publishableKey.isBlank();
+    }
+
+    private boolean isAdyenConfigured() {
+        if (properties.providers() == null || properties.providers().adyen() == null) return false;
+        var adyen = properties.providers().adyen();
+        return adyen.apiKey() != null && !adyen.apiKey().isBlank()
+                && adyen.merchantAccount() != null && !adyen.merchantAccount().isBlank()
+                && adyen.clientKey() != null && !adyen.clientKey().isBlank();
     }
 
     public record CreatePaymentIntentCommand(

@@ -1,3 +1,7 @@
 pasarela:
   flyway:
     auto-repair: true
+
+app:
+  payments:
+    mode: demo

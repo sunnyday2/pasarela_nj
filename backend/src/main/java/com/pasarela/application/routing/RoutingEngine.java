@@ -221,6 +221,7 @@ public class RoutingEngine {
         return switch (provider) {
             case STRIPE -> STRIPE_CURRENCIES.contains(currency);
             case ADYEN -> ADYEN_CURRENCIES.contains(currency);
+            case DEMO -> false;
         };
     }
 

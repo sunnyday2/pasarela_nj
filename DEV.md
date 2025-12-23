@@ -44,3 +44,20 @@ FRONTEND_PORT=3001 npm run dev
 ```
 
 Si no hay puertos libres en el rango, el script aborta con un mensaje indicando como liberar el puerto.
+
+## Demo payments mode
+
+En el profile `dev` se activa `app.payments.mode=demo`, que usa un provider mock cuando no hay credenciales externas.
+Podes forzar demo con:
+
+```bash
+PAYMENTS_MODE=demo
+# o
+PASARELA_DEMO_PROVIDER=true
+```
+
+Para desactivar demo en dev y usar Stripe/Adyen reales:
+
+```bash
+APP_PAYMENTS_MODE=auto
+```

@@ -8,6 +8,7 @@ package com.pasarela.application.routing;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pasarela.application.PaymentEventService;
 import com.pasarela.application.events.EventTypes;
+import com.pasarela.config.PaymentsMode;
 import com.pasarela.domain.model.CircuitState;
 import com.pasarela.domain.model.PaymentProvider;
 import com.pasarela.infrastructure.persistence.entity.PaymentEventEntity;
@@ -33,17 +34,20 @@ public class ProviderHealthService implements ProviderHealthReader {
     private final PaymentEventRepository paymentEventRepository;
     private final PaymentEventService paymentEventService;
     private final ObjectMapper objectMapper;
+    private final PaymentsMode paymentsMode;
 
     public ProviderHealthService(
             ProviderHealthSnapshotRepository snapshotRepository,
             PaymentEventRepository paymentEventRepository,
             PaymentEventService paymentEventService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            PaymentsMode paymentsMode
     ) {
         this.snapshotRepository = snapshotRepository;
         this.paymentEventRepository = paymentEventRepository;
         this.paymentEventService = paymentEventService;
         this.objectMapper = objectMapper;
+        this.paymentsMode = paymentsMode;
     }
 
     @Override
@@ -71,7 +75,10 @@ public class ProviderHealthService implements ProviderHealthReader {
     }
 
     public List<ProviderSnapshot> getAllSnapshots() {
-        return List.of(PaymentProvider.values()).stream().map(this::getSnapshot).toList();
+        List<PaymentProvider> providers = paymentsMode.isDemo()
+                ? List.of(PaymentProvider.values())
+                : List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN);
+        return providers.stream().map(this::getSnapshot).toList();
     }
 
     public void recordCreateSessionOutcome(PaymentProvider provider, java.util.UUID paymentIntentId, boolean success, long latencyMs, String errorType, String payloadForHash) {
