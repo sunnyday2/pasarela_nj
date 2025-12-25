@@ -49,6 +49,23 @@ npm run dev
 
 Ver `DEV.md` para Flyway repair, demo payments mode y troubleshooting de puertos.
 
+## Proveedores por merchant (admin)
+
+Endpoints protegidos con JWT admin:
+
+- `GET /api/merchants/{merchantId}/providers`
+- `PUT /api/merchants/{merchantId}/providers/{provider}`
+- `DELETE /api/merchants/{merchantId}/providers/{provider}`
+
+El backend encripta la configuración y devuelve valores enmascarados al listar.
+
+## Demo checkout
+
+En modo demo o con `providerPreference=DEMO` podés simular el flujo desde la UI:
+
+- `POST /api/payment-intents/{id}/demo/authorize` `{ "outcome": "approved|declined" }`
+- `POST /api/payment-intents/{id}/demo/cancel`
+
 ### API base / CORS
 
 - Por defecto el frontend llama a `/api/*` y Next.js lo proxya al backend (sin CORS).

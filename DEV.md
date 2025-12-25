@@ -61,3 +61,15 @@ Para desactivar demo en dev y usar Stripe/Adyen reales:
 ```bash
 APP_PAYMENTS_MODE=auto
 ```
+
+## Configurar proveedores por merchant (admin)
+
+Endpoints admin (JWT):
+
+```bash
+GET    /api/merchants/{merchantId}/providers
+PUT    /api/merchants/{merchantId}/providers/{provider}
+DELETE /api/merchants/{merchantId}/providers/{provider}
+```
+
+Los valores se guardan encriptados (APP_ENCRYPTION_KEY_BASE64) y el backend devuelve los secretos enmascarados.
