@@ -32,6 +32,14 @@ export type ProviderConfigRequest = {
   config?: Record<string, string>;
 };
 
+export type ProviderStatus = {
+  provider: PaymentProvider;
+  configured: boolean;
+  enabled: boolean;
+  healthy: boolean;
+  reason?: string | null;
+};
+
 export type CreateMerchantResponse = {
   merchant: MerchantDto;
   apiKey: string;
@@ -162,6 +170,13 @@ export async function listPaymentIntents(merchantApiKey: string) {
   }) as Promise<PaymentIntentView[]>;
 }
 
+export async function listProviders(merchantApiKey: string) {
+  return apiFetch("/api/providers", {
+    method: "GET",
+    headers: { "X-Api-Key": merchantApiKey }
+  }) as Promise<ProviderStatus[]>;
+}
+
 export async function createPaymentIntent(
   merchantApiKey: string,
   req: { amountMinor: number; currency: string; description?: string; providerPreference: ProviderPreference },
@@ -184,11 +199,16 @@ export async function getPaymentIntent(merchantApiKey: string, id: string) {
   }) as Promise<PaymentIntentWithConfigResponse>;
 }
 
-export async function reroutePaymentIntent(merchantApiKey: string, id: string, reason: string) {
+export async function reroutePaymentIntent(
+  merchantApiKey: string,
+  id: string,
+  reason: string,
+  providerPreference?: ProviderPreference
+) {
   return apiFetch(`/api/payment-intents/${encodeURIComponent(id)}/reroute`, {
     method: "POST",
     headers: { "X-Api-Key": merchantApiKey },
-    body: JSON.stringify({ reason })
+    body: JSON.stringify({ reason, providerPreference })
   }) as Promise<PaymentIntentCreateResponse>;
 }
 

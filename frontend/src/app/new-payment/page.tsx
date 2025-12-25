@@ -40,7 +40,8 @@ export default function NewPaymentPage() {
         { amountMinor, currency: currency.toUpperCase(), description, providerPreference },
         idempotencyKey
       );
-      router.push(`/checkout/${res.paymentIntentId}`);
+      const isDemo = res.provider === "DEMO" || res.routingReasonCode === "DEMO_MODE" || providerPreference === "DEMO";
+      router.push(isDemo ? `/demo-checkout/${res.paymentIntentId}` : `/checkout/${res.paymentIntentId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
     } finally {
