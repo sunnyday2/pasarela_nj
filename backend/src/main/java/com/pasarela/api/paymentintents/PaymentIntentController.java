@@ -117,6 +117,36 @@ public class PaymentIntentController {
         );
     }
 
+    @PostMapping("/{id}/demo/authorize")
+    public PaymentIntentService.PaymentIntentView demoAuthorize(
+            @AuthenticationPrincipal MerchantPrincipal merchant,
+            @PathVariable("id") UUID paymentIntentId,
+            @RequestHeader(value = "X-Request-Id", required = false) String requestId,
+            @RequestBody(required = false) DemoAuthorizeRequest req
+    ) {
+        MerchantPrincipal resolved = requireMerchant(merchant);
+        return paymentIntentService.demoAuthorize(
+                resolved.merchantId(),
+                paymentIntentId,
+                req == null ? null : req.outcome(),
+                requestId == null ? "n/a" : requestId
+        );
+    }
+
+    @PostMapping("/{id}/demo/cancel")
+    public PaymentIntentService.PaymentIntentView demoCancel(
+            @AuthenticationPrincipal MerchantPrincipal merchant,
+            @PathVariable("id") UUID paymentIntentId,
+            @RequestHeader(value = "X-Request-Id", required = false) String requestId
+    ) {
+        MerchantPrincipal resolved = requireMerchant(merchant);
+        return paymentIntentService.demoCancel(
+                resolved.merchantId(),
+                paymentIntentId,
+                requestId == null ? "n/a" : requestId
+        );
+    }
+
     private MerchantPrincipal requireMerchant(MerchantPrincipal merchant) {
         if (merchant == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing/Invalid X-Api-Key (or X-Merchant-Api-Key)");
@@ -134,6 +164,8 @@ public class PaymentIntentController {
     public record RerouteRequest(@NotBlank @Size(max = 200) String reason) {}
 
     public record RefundRequest(@NotBlank @Size(max = 200) String reason) {}
+
+    public record DemoAuthorizeRequest(String outcome) {}
 
     public record PaymentIntentCreateResponse(
             UUID paymentIntentId,

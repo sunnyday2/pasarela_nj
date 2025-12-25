@@ -8,6 +8,7 @@ package com.pasarela.infrastructure.provider;
 import com.pasarela.domain.model.PaymentProvider;
 
 import java.util.UUID;
+import java.util.Map;
 
 public record CreateSessionCommand(
         UUID merchantId,
@@ -17,6 +18,6 @@ public record CreateSessionCommand(
         String description,
         String idempotencyKey,
         String returnUrl,
-        PaymentProvider provider
+        PaymentProvider provider,
+        Map<String, String> providerConfig
 ) {}
-

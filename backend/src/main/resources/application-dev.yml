@@ -5,3 +5,12 @@ pasarela:
 app:
   payments:
     mode: demo
+
+logging:
+  level:
+    com.pasarela: DEBUG
+    com.pasarela.application: DEBUG
+    com.pasarela.infrastructure: DEBUG
+    org.springframework.web.client: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+    reactor.netty.http.client: INFO

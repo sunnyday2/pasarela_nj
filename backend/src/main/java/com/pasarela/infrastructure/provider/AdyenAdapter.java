@@ -43,10 +43,15 @@ public class AdyenAdapter implements PaymentProviderAdapter {
 
     @Override
     public CreateSessionResult createSession(CreateSessionCommand command) {
-        var cfg = properties.providers().adyen();
-        if (cfg.apiKey() == null || cfg.apiKey().isBlank()
-                || cfg.merchantAccount() == null || cfg.merchantAccount().isBlank()
-                || cfg.clientKey() == null || cfg.clientKey().isBlank()) {
+        Map<String, String> cfg = command.providerConfig();
+        var fallback = properties.providers().adyen();
+        String apiKey = resolveConfigValue(cfg, "apiKey", fallback.apiKey());
+        String merchantAccount = resolveConfigValue(cfg, "merchantAccount", fallback.merchantAccount());
+        String clientKey = resolveConfigValue(cfg, "clientKey", fallback.clientKey());
+        String environment = resolveConfigValue(cfg, "environment", fallback.environment());
+        if (apiKey == null || apiKey.isBlank()
+                || merchantAccount == null || merchantAccount.isBlank()
+                || clientKey == null || clientKey.isBlank()) {
             throw new ProviderException(provider(), ProviderErrorType.VALIDATION, "Adyen is not configured");
         }
 
@@ -56,7 +61,7 @@ public class AdyenAdapter implements PaymentProviderAdapter {
         }
 
         Map<String, Object> body = new HashMap<>();
-        body.put("merchantAccount", cfg.merchantAccount());
+        body.put("merchantAccount", merchantAccount);
         body.put("reference", command.paymentIntentId().toString());
         body.put("returnUrl", returnUrl);
         body.put("channel", "Web");
@@ -69,7 +74,7 @@ public class AdyenAdapter implements PaymentProviderAdapter {
             AdyenSessionResponse resp = adyenWebClient.post()
                     .uri("/" + CHECKOUT_API_VERSION + "/sessions")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-API-Key", cfg.apiKey())
+                    .header("X-API-Key", apiKey)
                     .headers(h -> {
                         if (command.idempotencyKey() != null && !command.idempotencyKey().isBlank()) {
                             h.set("Idempotency-Key", "po:" + command.merchantId() + ":" + command.idempotencyKey());
@@ -89,8 +94,8 @@ public class AdyenAdapter implements PaymentProviderAdapter {
 
             Map<String, Object> checkoutConfig = new HashMap<>();
             checkoutConfig.put("type", "ADYEN");
-            checkoutConfig.put("clientKey", cfg.clientKey());
-            checkoutConfig.put("environment", cfg.environment());
+            checkoutConfig.put("clientKey", clientKey);
+            checkoutConfig.put("environment", environment);
             checkoutConfig.put("sessionId", resp.id);
             checkoutConfig.put("sessionData", resp.sessionData);
 
@@ -106,9 +111,12 @@ public class AdyenAdapter implements PaymentProviderAdapter {
 
     @Override
     public RefundResult refund(RefundCommand command) {
-        var cfg = properties.providers().adyen();
-        if (cfg.apiKey() == null || cfg.apiKey().isBlank()
-                || cfg.merchantAccount() == null || cfg.merchantAccount().isBlank()) {
+        Map<String, String> cfg = command.providerConfig();
+        var fallback = properties.providers().adyen();
+        String apiKey = resolveConfigValue(cfg, "apiKey", fallback.apiKey());
+        String merchantAccount = resolveConfigValue(cfg, "merchantAccount", fallback.merchantAccount());
+        if (apiKey == null || apiKey.isBlank()
+                || merchantAccount == null || merchantAccount.isBlank()) {
             throw new ProviderException(provider(), ProviderErrorType.VALIDATION, "Adyen is not configured");
         }
 
@@ -117,7 +125,7 @@ public class AdyenAdapter implements PaymentProviderAdapter {
         }
 
         Map<String, Object> body = new HashMap<>();
-        body.put("merchantAccount", cfg.merchantAccount());
+        body.put("merchantAccount", merchantAccount);
         body.put("reference", "refund-" + command.providerRef());
         body.put("amount", Map.of("value", command.amountMinor(), "currency", command.currency().toUpperCase()));
 
@@ -125,7 +133,7 @@ public class AdyenAdapter implements PaymentProviderAdapter {
             Map<?, ?> resp = adyenWebClient.post()
                     .uri("/" + CHECKOUT_API_VERSION + "/payments/" + command.providerRef() + "/refunds")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-API-Key", cfg.apiKey())
+                    .header("X-API-Key", apiKey)
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -151,9 +159,16 @@ public class AdyenAdapter implements PaymentProviderAdapter {
         return new ProviderException(provider(), type, "Adyen request failed");
     }
 
+    private String resolveConfigValue(Map<String, String> cfg, String key, String fallback) {
+        if (cfg != null) {
+            String value = cfg.get(key);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return fallback;
+    }
+
     private static final class AdyenSessionResponse {
         public String id;
         public String sessionData;
     }
 }
-

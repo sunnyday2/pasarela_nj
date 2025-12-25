@@ -24,6 +24,8 @@ import java.util.UUID;
 public class RoutingEngine {
     private static final Set<String> STRIPE_CURRENCIES = Set.of("USD", "EUR", "GBP");
     private static final Set<String> ADYEN_CURRENCIES = Set.of("USD", "EUR", "MXN");
+    private static final Set<String> PAYPAL_CURRENCIES = Set.of("USD", "EUR", "GBP");
+    private static final Set<String> TRANSBANK_CURRENCIES = Set.of("USD", "EUR", "CLP");
 
     private final ProviderHealthReader providerHealthReader;
     private final ObjectMapper objectMapper;
@@ -39,43 +41,48 @@ public class RoutingEngine {
             long amountMinor,
             String currency,
             ProviderPreference preference,
-            Set<PaymentProvider> excludedProviders
+            Set<PaymentProvider> excludedProviders,
+            List<PaymentProvider> candidates
     ) {
         String cur = currency == null ? "" : currency.toUpperCase();
         RoutingConfig merchantConfig = parseConfig(merchant.getConfigJson());
 
+        List<PaymentProvider> baseCandidates = (candidates == null || candidates.isEmpty())
+                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN)
+                : candidates;
+
         if (preference != null && preference != ProviderPreference.AUTO) {
             PaymentProvider chosen = preference.toProvider();
             ensureHardConstraints(chosen, cur);
-            return buildResult(paymentIntentId, amountMinor, cur, merchantConfig, chosen, "EXPLICIT_PREFERENCE");
+            return buildResult(paymentIntentId, amountMinor, cur, merchantConfig, chosen, "EXPLICIT_PREFERENCE", baseCandidates);
         }
 
         if (preference == null || preference == ProviderPreference.AUTO) {
             if (merchantConfig.forceProvider() != null && !"AUTO".equalsIgnoreCase(merchantConfig.forceProvider())) {
                 PaymentProvider forced = PaymentProvider.valueOf(merchantConfig.forceProvider().toUpperCase());
                 ensureHardConstraints(forced, cur);
-                return buildResult(paymentIntentId, amountMinor, cur, merchantConfig, forced, "MERCHANT_FORCE_PROVIDER");
+                return buildResult(paymentIntentId, amountMinor, cur, merchantConfig, forced, "MERCHANT_FORCE_PROVIDER", baseCandidates);
             }
         }
 
-        List<PaymentProvider> candidates = List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN).stream()
+        List<PaymentProvider> candidatesFiltered = baseCandidates.stream()
                 .filter(p -> excludedProviders == null || !excludedProviders.contains(p))
                 .filter(p -> supportsCurrency(p, cur))
                 .toList();
 
-        if (candidates.isEmpty()) {
+        if (candidatesFiltered.isEmpty()) {
             throw new IllegalArgumentException("No provider supports currency " + cur);
         }
 
         Map<PaymentProvider, ProviderSnapshot> snapshots = new EnumMap<>(PaymentProvider.class);
-        for (PaymentProvider provider : candidates) {
+        for (PaymentProvider provider : candidatesFiltered) {
             snapshots.put(provider, providerHealthReader.getSnapshot(provider));
         }
 
-        List<PaymentProvider> nonOpen = candidates.stream()
+        List<PaymentProvider> nonOpen = candidatesFiltered.stream()
                 .filter(p -> snapshots.get(p).circuitState() != CircuitState.OPEN)
                 .toList();
-        List<PaymentProvider> effectiveCandidates = nonOpen.isEmpty() ? candidates : nonOpen;
+        List<PaymentProvider> effectiveCandidates = nonOpen.isEmpty() ? candidatesFiltered : nonOpen;
 
         EnumMap<PaymentProvider, ScoreBreakdown> breakdowns = new EnumMap<>(PaymentProvider.class);
         for (PaymentProvider provider : effectiveCandidates) {
@@ -91,13 +98,25 @@ public class RoutingEngine {
         return toResult(chosen, reason, breakdowns, snapshots, merchantConfig, amountMinor, cur);
     }
 
-    private RoutingResult buildResult(UUID paymentIntentId, long amountMinor, String currency, RoutingConfig cfg, PaymentProvider chosen, String reason) {
+    private RoutingResult buildResult(
+            UUID paymentIntentId,
+            long amountMinor,
+            String currency,
+            RoutingConfig cfg,
+            PaymentProvider chosen,
+            String reason,
+            List<PaymentProvider> candidates
+    ) {
+        List<PaymentProvider> baseCandidates = (candidates == null || candidates.isEmpty())
+                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN)
+                : candidates;
         EnumMap<PaymentProvider, ProviderSnapshot> snapshots = new EnumMap<>(PaymentProvider.class);
-        snapshots.put(PaymentProvider.STRIPE, providerHealthReader.getSnapshot(PaymentProvider.STRIPE));
-        snapshots.put(PaymentProvider.ADYEN, providerHealthReader.getSnapshot(PaymentProvider.ADYEN));
+        for (PaymentProvider provider : baseCandidates) {
+            snapshots.put(provider, providerHealthReader.getSnapshot(provider));
+        }
 
         EnumMap<PaymentProvider, ScoreBreakdown> breakdowns = new EnumMap<>(PaymentProvider.class);
-        for (PaymentProvider p : PaymentProvider.values()) {
+        for (PaymentProvider p : baseCandidates) {
             if (supportsCurrency(p, currency)) breakdowns.put(p, score(p, amountMinor, cfg, snapshots.get(p)));
         }
         return toResult(chosen, reason, breakdowns, snapshots, cfg, amountMinor, currency);
@@ -166,11 +185,11 @@ public class RoutingEngine {
 
         // Stable tie-breaker
         PaymentProvider finalBest = best;
-        PaymentProvider other = candidates.stream().filter(p -> p != finalBest).findFirst().orElse(finalBest);
-        double otherScore = breakdowns.get(other).totalScore();
-        if (Math.abs(bestScore - otherScore) < 1e-6) {
-            int bucket = Math.floorMod(fnv1a32(paymentIntentId.toString()), 2);
-            return bucket == 0 ? PaymentProvider.STRIPE : PaymentProvider.ADYEN;
+        double tieScore = breakdowns.get(finalBest).totalScore();
+        boolean tie = candidates.stream().anyMatch(p -> p != finalBest && Math.abs(breakdowns.get(p).totalScore() - tieScore) < 1e-6);
+        if (tie) {
+            int bucket = Math.floorMod(fnv1a32(paymentIntentId.toString()), candidates.size());
+            return candidates.get(bucket);
         }
         return best;
     }
@@ -221,6 +240,8 @@ public class RoutingEngine {
         return switch (provider) {
             case STRIPE -> STRIPE_CURRENCIES.contains(currency);
             case ADYEN -> ADYEN_CURRENCIES.contains(currency);
+            case PAYPAL -> PAYPAL_CURRENCIES.contains(currency);
+            case TRANSBANK -> TRANSBANK_CURRENCIES.contains(currency);
             case DEMO -> false;
         };
     }

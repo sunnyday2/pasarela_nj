@@ -10,123 +10,116 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.sql.SQLException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
-    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
-    private final JdbcTemplate jdbcTemplate;
-    private final Environment environment;
 
-    public ApiExceptionHandler(JdbcTemplate jdbcTemplate, Environment environment) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.environment = environment;
-    }
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
-    public ResponseEntity<ApiErrorResponse> handleApi(ApiException e) {
-        return ResponseEntity.status(e.getStatus()).body(new ApiErrorResponse(
-                e.getStatus().name(),
-                e.getMessage(),
-                MDC.get(RequestIdFilter.MDC_KEY)
-        ));
+    public ResponseEntity<ApiErrorResponse> handleApi(ApiException ex) {
+        return respond(ex.getStatus(), ex.getStatus().name(), ex.getMessage());
     }
 
-    @ExceptionHandler({IllegalArgumentException.class})
-    public ResponseEntity<ApiErrorResponse> handleBadRequest(RuntimeException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiErrorResponse(
-                "BAD_REQUEST",
-                e.getMessage(),
-                MDC.get(RequestIdFilter.MDC_KEY)
-        ));
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiErrorResponse> handleBadRequest(IllegalArgumentException ex) {
+        return respond(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage());
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
-    public ResponseEntity<ApiErrorResponse> handleValidation(Exception e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiErrorResponse(
-                "VALIDATION_ERROR",
-                "Invalid request",
-                MDC.get(RequestIdFilter.MDC_KEY)
-        ));
+    public ResponseEntity<ApiErrorResponse> handleValidation(Exception ex) {
+        return respond(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Invalid request");
     }
 
-    @ExceptionHandler({DataIntegrityViolationException.class, org.hibernate.exception.ConstraintViolationException.class})
-    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(Exception e) {
-        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
-        String fkDetails = isDevProfile() ? foreignKeyDiagnostics() : "";
-        log.error("Data integrity violation requestId={} fk_check={}", requestId, fkDetails, e);
-        String message = "Foreign key constraint failed";
-        if (fkDetails != null && !fkDetails.isBlank()) {
-            message = message + " (" + fkDetails + ")";
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        return conflict("DATA_INTEGRITY_VIOLATION", "Data integrity violation", ex);
+    }
+
+    /**
+     * En algunos casos la violación aparece al hacer commit y viene envuelta así.
+     */
+    @ExceptionHandler(TransactionSystemException.class)
+    public ResponseEntity<ApiErrorResponse> handleTransactionSystem(TransactionSystemException ex) {
+        if (isIntegrityViolation(ex)) {
+            return conflict("DATA_INTEGRITY_VIOLATION", "Data integrity violation", ex);
         }
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(
-                "FK_CONSTRAINT",
+        return internal(ex);
+    }
+
+    /**
+     * Fallback: si algo llega como 500 pero su causa raíz es constraint (SQLite / Hibernate),
+     * lo bajamos a 409 para cumplir el contrato esperado por ApiErrorHandlingTest.
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorResponse> handleAny(Exception ex) {
+        if (isIntegrityViolation(ex)) {
+            return conflict("DATA_INTEGRITY_VIOLATION", "Data integrity violation", ex);
+        }
+        return internal(ex);
+    }
+
+    // ---------- helpers ----------
+
+    private ResponseEntity<ApiErrorResponse> respond(HttpStatus status, String code, String message) {
+        String requestId = currentRequestId();
+        ApiErrorResponse body = new ApiErrorResponse(
+                status.name(),
+                code,
                 message,
                 requestId
-        ));
+        );
+        return ResponseEntity.status(status).body(body);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception e) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ApiErrorResponse(
-                "INTERNAL_ERROR",
-                "Unexpected error",
-                MDC.get(RequestIdFilter.MDC_KEY)
-        ));
+    private ResponseEntity<ApiErrorResponse> conflict(String code, String message, Exception ex) {
+        String requestId = currentRequestId();
+        log.warn("API conflict requestId={} code={} message={}", requestId, code, message, ex);
+        return respond(HttpStatus.CONFLICT, code, message);
     }
 
-    private String foreignKeyDiagnostics() {
-        try {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList("PRAGMA foreign_key_check");
-            if (rows.isEmpty()) return "";
-            return rows.stream()
-                    .limit(5)
-                    .map(this::formatForeignKeyRow)
-                    .collect(Collectors.joining("; "));
-        } catch (Exception ex) {
-            log.warn("foreign_key_check failed", ex);
-            return "";
+    private ResponseEntity<ApiErrorResponse> internal(Exception ex) {
+        String requestId = currentRequestId();
+        log.error("Unhandled exception requestId={}", requestId, ex);
+        return respond(HttpStatus.INTERNAL_SERVER_ERROR, "UNEXPECTED_ERROR", "Unexpected error");
+    }
+
+    private String currentRequestId() {
+        String rid = MDC.get(RequestIdFilter.MDC_KEY);
+        return (rid == null || rid.isBlank()) ? "" : rid;
+    }
+
+    /**
+     * Detecta violaciones de integridad aunque vengan envueltas:
+     * - Spring DataIntegrityViolationException
+     * - Hibernate ConstraintViolationException
+     * - SQLException con SQLITE_CONSTRAINT
+     */
+    private boolean isIntegrityViolation(Throwable ex) {
+        Throwable t = ex;
+        while (t != null) {
+            if (t instanceof DataIntegrityViolationException) return true;
+
+            // Hibernate
+            if (t instanceof org.hibernate.exception.ConstraintViolationException) return true;
+
+            // SQLite
+            if (t instanceof SQLException sql) {
+                String msg = sql.getMessage();
+                if (msg != null && msg.contains("SQLITE_CONSTRAINT")) return true;
+            }
+
+            t = t.getCause();
         }
-    }
-
-    private boolean isDevProfile() {
-        return environment != null && environment.acceptsProfiles(Profiles.of("dev"));
-    }
-
-    private String formatForeignKeyRow(Map<String, Object> row) {
-        String table = String.valueOf(row.get("table"));
-        String parent = String.valueOf(row.get("parent"));
-        Object fkId = row.get("fkid");
-        String columns = resolveForeignKeyColumns(table, fkId);
-        return "table=" + table + " column=" + columns + " parent=" + parent;
-    }
-
-    private String resolveForeignKeyColumns(String table, Object fkId) {
-        try {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList("PRAGMA foreign_key_list(" + table + ")");
-            String targetId = String.valueOf(fkId);
-            List<String> cols = rows.stream()
-                    .filter(r -> targetId.equals(String.valueOf(r.get("id"))))
-                    .map(r -> String.valueOf(r.get("from")))
-                    .distinct()
-                    .toList();
-            if (cols.isEmpty()) return "?";
-            return String.join(",", cols);
-        } catch (Exception ex) {
-            log.warn("foreign_key_list failed for table={}", table, ex);
-            return "?";
-        }
+        return false;
     }
 }

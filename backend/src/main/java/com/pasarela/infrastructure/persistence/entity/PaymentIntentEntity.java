@@ -12,18 +12,24 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
+import jakarta.persistence.PostUpdate;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.domain.Persistable;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "payment_intents")
-public class PaymentIntentEntity {
+public class PaymentIntentEntity implements Persistable<UUID> {
+
     @Id
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "id", nullable = false, length = 36)
@@ -70,24 +76,51 @@ public class PaymentIntentEntity {
     @Column(name = "attempt_number", nullable = false)
     private int attemptNumber;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Transient
+    private boolean isNew = true;
+
+    public PaymentIntentEntity() {
+        // JPA
+    }
+
     @PrePersist
-    void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
-        if (updatedAt == null) updatedAt = createdAt;
+    private void prePersist() {
+        Instant now = Instant.now();
+
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        // En alta, updatedAt debe quedar consistente con "now"
+        updatedAt = now;
     }
 
     @PreUpdate
-    void preUpdate() {
+    private void preUpdate() {
         updatedAt = Instant.now();
     }
 
+    @PostLoad
+    @PostPersist
+    @PostUpdate
+    private void markNotNew() {
+        isNew = false;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @Override
     public UUID getId() {
         return id;
     }
@@ -208,4 +241,3 @@ public class PaymentIntentEntity {
         this.updatedAt = updatedAt;
     }
 }
-

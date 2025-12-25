@@ -69,7 +69,7 @@ class PaymentIntentNoProvidersTest {
         Map body = res.getBody();
         assertNotNull(body);
         assertEquals(
-                "No payment providers configured. Set STRIPE_* or ADYEN_* or enable demo mode (PAYMENTS_MODE=demo).",
+                "No payment providers configured for merchant. Configure providers or enable demo mode (PAYMENTS_MODE=demo).",
                 body.get("message")
         );
     }

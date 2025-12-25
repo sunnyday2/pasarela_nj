@@ -39,8 +39,9 @@ public class StripeAdapter implements PaymentProviderAdapter {
 
     @Override
     public CreateSessionResult createSession(CreateSessionCommand command) {
-        String secretKey = properties.providers().stripe().secretKey();
-        String publishableKey = properties.providers().stripe().publishableKey();
+        Map<String, String> cfg = command.providerConfig();
+        String secretKey = resolveConfigValue(cfg, "secretKey", properties.providers().stripe().secretKey());
+        String publishableKey = resolveConfigValue(cfg, "publishableKey", properties.providers().stripe().publishableKey());
         if (secretKey == null || secretKey.isBlank() || publishableKey == null || publishableKey.isBlank()) {
             throw new ProviderException(provider(), ProviderErrorType.VALIDATION, "Stripe is not configured");
         }
@@ -86,7 +87,8 @@ public class StripeAdapter implements PaymentProviderAdapter {
 
     @Override
     public RefundResult refund(RefundCommand command) {
-        String secretKey = properties.providers().stripe().secretKey();
+        Map<String, String> cfg = command.providerConfig();
+        String secretKey = resolveConfigValue(cfg, "secretKey", properties.providers().stripe().secretKey());
         if (secretKey == null || secretKey.isBlank()) {
             throw new ProviderException(provider(), ProviderErrorType.VALIDATION, "Stripe is not configured");
         }
@@ -119,5 +121,12 @@ public class StripeAdapter implements PaymentProviderAdapter {
         log.warn("Stripe error type={} status={}", type, status);
         return new ProviderException(provider(), type, "Stripe request failed");
     }
-}
 
+    private String resolveConfigValue(Map<String, String> cfg, String key, String fallback) {
+        if (cfg != null) {
+            String value = cfg.get(key);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return fallback;
+    }
+}

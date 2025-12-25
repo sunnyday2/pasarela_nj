@@ -7,7 +7,7 @@ package com.pasarela.api;
 
 public record ApiErrorResponse(
         String error,
+        String code,
         String message,
         String requestId
 ) {}
-

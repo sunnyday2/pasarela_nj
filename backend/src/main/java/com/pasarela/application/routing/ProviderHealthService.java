@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ProviderHealthService implements ProviderHealthReader {
@@ -35,19 +36,22 @@ public class ProviderHealthService implements ProviderHealthReader {
     private final PaymentEventService paymentEventService;
     private final ObjectMapper objectMapper;
     private final PaymentsMode paymentsMode;
+    private final com.pasarela.application.ProviderAdapterRegistry providerAdapterRegistry;
 
     public ProviderHealthService(
             ProviderHealthSnapshotRepository snapshotRepository,
             PaymentEventRepository paymentEventRepository,
             PaymentEventService paymentEventService,
             ObjectMapper objectMapper,
-            PaymentsMode paymentsMode
+            PaymentsMode paymentsMode,
+            com.pasarela.application.ProviderAdapterRegistry providerAdapterRegistry
     ) {
         this.snapshotRepository = snapshotRepository;
         this.paymentEventRepository = paymentEventRepository;
         this.paymentEventService = paymentEventService;
         this.objectMapper = objectMapper;
         this.paymentsMode = paymentsMode;
+        this.providerAdapterRegistry = providerAdapterRegistry;
     }
 
     @Override
@@ -75,10 +79,19 @@ public class ProviderHealthService implements ProviderHealthReader {
     }
 
     public List<ProviderSnapshot> getAllSnapshots() {
-        List<PaymentProvider> providers = paymentsMode.isDemo()
-                ? List.of(PaymentProvider.values())
-                : List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN);
-        return providers.stream().map(this::getSnapshot).toList();
+        List<PaymentProvider> ordered = List.of(
+                PaymentProvider.STRIPE,
+                PaymentProvider.ADYEN,
+                PaymentProvider.PAYPAL,
+                PaymentProvider.TRANSBANK,
+                PaymentProvider.DEMO
+        );
+        Set<PaymentProvider> supported = providerAdapterRegistry.registeredProviders();
+        return ordered.stream()
+                .filter(supported::contains)
+                .filter(p -> paymentsMode.isDemo() || p != PaymentProvider.DEMO)
+                .map(this::getSnapshot)
+                .toList();
     }
 
     public void recordCreateSessionOutcome(PaymentProvider provider, java.util.UUID paymentIntentId, boolean success, long latencyMs, String errorType, String payloadForHash) {

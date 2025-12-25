@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -41,8 +42,9 @@ class RoutingEngineTest {
 
         UUID paymentIntentId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
-        RoutingEngine.RoutingResult r1 = engine.decide(merchant, paymentIntentId, 1000, "EUR", ProviderPreference.AUTO, Set.of());
-        RoutingEngine.RoutingResult r2 = engine.decide(merchant, paymentIntentId, 1000, "EUR", ProviderPreference.AUTO, Set.of());
+        var candidates = List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN);
+        RoutingEngine.RoutingResult r1 = engine.decide(merchant, paymentIntentId, 1000, "EUR", ProviderPreference.AUTO, Set.of(), candidates);
+        RoutingEngine.RoutingResult r2 = engine.decide(merchant, paymentIntentId, 1000, "EUR", ProviderPreference.AUTO, Set.of(), candidates);
 
         assertEquals(r1.chosenProvider(), r2.chosenProvider());
         assertEquals(expectedTieBreak(paymentIntentId), r1.chosenProvider());
@@ -60,7 +62,7 @@ class RoutingEngineTest {
         merchant.setConfigJson(new ObjectMapper().writeValueAsString(RoutingConfig.defaults()));
 
         assertThrows(IllegalArgumentException.class, () ->
-                engine.decide(merchant, UUID.randomUUID(), 1000, "MXN", ProviderPreference.STRIPE, Set.of())
+                engine.decide(merchant, UUID.randomUUID(), 1000, "MXN", ProviderPreference.STRIPE, Set.of(), List.of(PaymentProvider.STRIPE))
         );
     }
 
