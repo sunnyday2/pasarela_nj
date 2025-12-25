@@ -47,7 +47,7 @@ Si no hay puertos libres en el rango, el script aborta con un mensaje indicando 
 
 ## Demo payments mode
 
-En el profile `dev` se activa `app.payments.mode=demo`, que usa un provider mock cuando no hay credenciales externas.
+En el profile `dev` se activa `app.payments.mode=demo`, pero el backend también cae a DEMO cuando `AUTO` no tiene proveedores disponibles o saludables.
 Podes forzar demo con:
 
 ```bash
@@ -61,6 +61,22 @@ Para desactivar demo en dev y usar Stripe/Adyen reales:
 ```bash
 APP_PAYMENTS_MODE=auto
 ```
+
+## Estado de proveedores (merchant)
+
+Con `X-Api-Key`:
+
+```bash
+GET /api/providers
+```
+
+Respuesta incluye `configured`, `enabled`, `healthy` y `reason`.
+
+## Reroute UI
+
+- Checkout real: `/checkout/{id}`
+- Demo checkout: `/demo-checkout/{id}`
+- Reroute/selección de proveedor: `/checkout/{id}/reroute`
 
 ## Configurar proveedores por merchant (admin)
 

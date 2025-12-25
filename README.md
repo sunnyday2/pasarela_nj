@@ -15,7 +15,7 @@ El proveedor se decide **antes** de entregar `checkoutConfig` al frontend porque
 ## Fallbacks soportados
 
 - **Fallback instantáneo (automático)**: si falla `createSession`/`createPaymentIntent` por timeout/5xx/validación en el proveedor elegido, el backend reintenta con el otro proveedor y devuelve el `checkoutConfig` alternativo.
-- **Fallback con reintento del usuario**: si el pago falla dentro del proveedor (decline/3DS fail), el backend marca `FAILED` (por webhook) y el frontend habilita **“Intentar con otro proveedor”** (`POST /api/payment-intents/{id}/reroute`), creando un nuevo intent (nuevo `id`) y un nuevo `checkoutConfig`.
+- **Fallback con reintento del usuario**: si el pago falla dentro del proveedor (decline/3DS fail), el backend marca `FAILED` (por webhook) y el frontend redirige a **/checkout/{id}/reroute** para elegir proveedor. El endpoint acepta `providerPreference` opcional en `POST /api/payment-intents/{id}/reroute`.
 
 ## Requisitos
 
@@ -59,12 +59,20 @@ Endpoints protegidos con JWT admin:
 
 El backend encripta la configuración y devuelve valores enmascarados al listar.
 
+## Estado de proveedores (merchant)
+
+Con `X-Api-Key` (merchant):
+
+- `GET /api/providers` → `{ provider, configured, enabled, healthy, reason }`
+
 ## Demo checkout
 
 En modo demo o con `providerPreference=DEMO` podés simular el flujo desde la UI:
 
 - `POST /api/payment-intents/{id}/demo/authorize` `{ "outcome": "approved|declined" }`
 - `POST /api/payment-intents/{id}/demo/cancel`
+
+UI demo: `/demo-checkout/{id}`
 
 ### API base / CORS
 
