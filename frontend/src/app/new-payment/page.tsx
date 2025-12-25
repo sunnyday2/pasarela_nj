@@ -92,6 +92,9 @@ export default function NewPaymentPage() {
         <option value="AUTO">AUTO</option>
         <option value="STRIPE">STRIPE</option>
         <option value="ADYEN">ADYEN</option>
+        <option value="DEMO">DEMO</option>
+        <option value="PAYPAL">PAYPAL</option>
+        <option value="TRANSBANK">TRANSBANK</option>
       </select>
 
       {error ? (
@@ -113,4 +116,3 @@ export default function NewPaymentPage() {
     </div>
   );
 }
-

@@ -6,9 +6,16 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getPaymentIntent, reroutePaymentIntent, type PaymentIntentWithConfigResponse } from "@/lib/api";
+import {
+  demoAuthorizePaymentIntent,
+  demoCancelPaymentIntent,
+  getPaymentIntent,
+  reroutePaymentIntent,
+  type PaymentIntentWithConfigResponse,
+  type PaymentIntentView
+} from "@/lib/api";
 import { getMerchantApiKey, setMerchantApiKey } from "@/lib/storage";
 import { StripeCheckout } from "@/components/StripeCheckout";
 import { AdyenCheckout } from "@/components/AdyenCheckout";
@@ -34,6 +41,7 @@ function normalizeAdyenEnv(v: unknown): AdyenEnv {
 export default function CheckoutPage() {
   const router = useRouter();
   const params = useParams<{ paymentIntentId: string }>();
+  const searchParams = useSearchParams();
   const paymentIntentId = params.paymentIntentId;
 
   const [merchantApiKey, setMerchantApiKeyState] = useState<string>("");
@@ -43,6 +51,8 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
   const [pollingMsg, setPollingMsg] = useState<string | null>(null);
+  const [demoOutcome, setDemoOutcome] = useState<"approved" | "declined">("approved");
+  const [demoProcessing, setDemoProcessing] = useState(false);
 
   const pollingStopAt = useRef<number | null>(null);
 
@@ -124,9 +134,44 @@ export default function CheckoutPage() {
 
   const checkoutConfig = data?.checkoutConfig || {};
   const demoType = typeof checkoutConfig.type === "string" ? checkoutConfig.type : "";
-  const isDemo = provider === "DEMO" || demoType === "DEMO";
+  const demoQuery = searchParams.get("demo");
+  const isDemo = provider === "DEMO" || demoType === "DEMO" || demoQuery === "1";
   const demoCheckoutUrl = typeof checkoutConfig.checkoutUrl === "string" ? checkoutConfig.checkoutUrl : "";
   const providerLabel = isDemo ? "DEMO" : provider;
+
+  function updatePaymentIntent(next: PaymentIntentView) {
+    setData((prev) => (prev ? { ...prev, paymentIntent: next } : { paymentIntent: next, checkoutConfig: {} }));
+  }
+
+  async function onDemoPay() {
+    if (!merchantApiKey) return;
+    setError(null);
+    setDemoProcessing(true);
+    try {
+      const res = await demoAuthorizePaymentIntent(merchantApiKey, paymentIntentId, demoOutcome);
+      updatePaymentIntent(res);
+      await fetchOnce();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setDemoProcessing(false);
+    }
+  }
+
+  async function onDemoCancel() {
+    if (!merchantApiKey) return;
+    setError(null);
+    setDemoProcessing(true);
+    try {
+      const res = await demoCancelPaymentIntent(merchantApiKey, paymentIntentId);
+      updatePaymentIntent(res);
+      await fetchOnce();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setDemoProcessing(false);
+    }
+  }
 
   return (
     <div className="card">
@@ -208,13 +253,85 @@ export default function CheckoutPage() {
             <div className="card">
               {isDemo ? (
                 <div>
-                  <p className="muted" style={{ marginTop: 0 }}>
-                    Modo demo activo. No hay proveedor externo configurado.
-                  </p>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div className="muted">Demo checkout</div>
+                      <div className="pill">Pasarela simulada</div>
+                    </div>
+                    <div className="muted">{demoCheckoutUrl ? "checkoutUrl disponible" : "modo embebido"}</div>
+                  </div>
+
+                  <div style={{ height: 12 }} />
+
+                  <div className="row">
+                    {["Seleccionar método", "Autenticación", "Autorización", "Resultado"].map((step, idx) => (
+                      <span key={step} className="pill" style={{ fontSize: 11 }}>
+                        {idx + 1}. {step}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ height: 14 }} />
+
+                  <div className="card" style={{ background: "rgba(0,0,0,0.18)" }}>
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <div>
+                        <div className="muted">Comercio</div>
+                        <div>{data.paymentIntent.merchantId}</div>
+                      </div>
+                      <div>
+                        <div className="muted">Importe</div>
+                        <div>
+                          {data.paymentIntent.currency} {data.paymentIntent.amountMinor / 100}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="muted">Intent</div>
+                        <div>{data.paymentIntent.id.slice(0, 8)}…</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ height: 12 }} />
+
+                  <label className="label">Número de tarjeta</label>
+                  <input placeholder="4242 4242 4242 4242" />
+
+                  <div className="row">
+                    <div className="col">
+                      <label className="label">Expiración (MM/YY)</label>
+                      <input placeholder="12/29" />
+                    </div>
+                    <div className="col">
+                      <label className="label">CVV</label>
+                      <input placeholder="123" />
+                    </div>
+                  </div>
+
+                  <div style={{ height: 10 }} />
+
+                  <label className="label">Resultado simulado</label>
+                  <select value={demoOutcome} onChange={(e) => setDemoOutcome(e.target.value as "approved" | "declined")}>
+                    <option value="approved">Aprobado</option>
+                    <option value="declined">Rechazado</option>
+                  </select>
+
+                  <div style={{ height: 12 }} />
+
+                  <div className="row">
+                    <button className="primary" onClick={onDemoPay} disabled={demoProcessing || !merchantApiKey}>
+                      {demoProcessing ? "Procesando..." : "PAGAR"}
+                    </button>
+                    <button className="danger" onClick={onDemoCancel} disabled={demoProcessing || !merchantApiKey}>
+                      CANCELAR
+                    </button>
+                  </div>
+
                   {demoCheckoutUrl ? (
-                    <p style={{ marginBottom: 0 }}>
+                    <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
+                      También podés abrir el checkout externo demo:{" "}
                       <a href={demoCheckoutUrl} target="_blank" rel="noreferrer">
-                        Abrir checkout demo
+                        {demoCheckoutUrl}
                       </a>
                     </p>
                   ) : null}
