@@ -48,7 +48,7 @@ class PaymentIntentNoProvidersTest {
     }
 
     @Test
-    void createPaymentIntentWithoutProvidersReturnsClearError() {
+    void createPaymentIntentWithoutProvidersFallsBackToDemo() {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Api-Key", apiKey);
 
@@ -65,12 +65,10 @@ class PaymentIntentNoProvidersTest {
                 Map.class
         );
 
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, res.getStatusCode());
+        assertEquals(HttpStatus.OK, res.getStatusCode());
         Map body = res.getBody();
         assertNotNull(body);
-        assertEquals(
-                "No payment providers configured for merchant. Configure providers or enable demo mode (PAYMENTS_MODE=demo).",
-                body.get("message")
-        );
+        assertEquals("DEMO", body.get("provider"));
+        assertEquals("DEMO_MODE", body.get("routingReasonCode"));
     }
 }

@@ -74,6 +74,7 @@ public class PaymentIntentController {
                 resolved.merchantId(),
                 paymentIntentId,
                 req.reason(),
+                req.providerPreference(),
                 requestId == null ? "n/a" : requestId
         );
         return PaymentIntentCreateResponse.from(created);
@@ -161,7 +162,10 @@ public class PaymentIntentController {
             ProviderPreference providerPreference
     ) {}
 
-    public record RerouteRequest(@NotBlank @Size(max = 200) String reason) {}
+    public record RerouteRequest(
+            @NotBlank @Size(max = 200) String reason,
+            ProviderPreference providerPreference
+    ) {}
 
     public record RefundRequest(@NotBlank @Size(max = 200) String reason) {}
 

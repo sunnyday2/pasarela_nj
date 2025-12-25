@@ -35,7 +35,7 @@ public class MerchantApiKeyAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return !path.startsWith("/api/payment-intents");
+        return !(path.startsWith("/api/payment-intents") || path.startsWith("/api/providers"));
     }
 
     @Override

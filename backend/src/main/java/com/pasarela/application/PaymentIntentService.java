@@ -10,8 +10,6 @@ import com.pasarela.api.ApiException;
 import com.pasarela.application.routing.ProviderHealthService;
 import com.pasarela.application.routing.ProviderPreference;
 import com.pasarela.application.routing.RoutingEngine;
-import com.pasarela.config.AppProperties;
-import com.pasarela.config.PaymentsMode;
 import com.pasarela.domain.model.PaymentProvider;
 import com.pasarela.domain.model.PaymentStatus;
 import com.pasarela.infrastructure.checkout.CheckoutConfigStore;
@@ -52,12 +50,11 @@ public class PaymentIntentService {
     private final RoutingDecisionRepository routingDecisionRepository;
     private final RoutingEngine routingEngine;
     private final ProviderAdapterRegistry providerAdapterRegistry;
+    private final ProviderAvailabilityService providerAvailabilityService;
     private final CheckoutConfigStore checkoutConfigStore;
     private final IdempotencyService idempotencyService;
     private final ProviderHealthService providerHealthService;
     private final ObjectMapper objectMapper;
-    private final AppProperties properties;
-    private final PaymentsMode paymentsMode;
 
     public PaymentIntentService(
             MerchantRepository merchantRepository,
@@ -66,12 +63,11 @@ public class PaymentIntentService {
             RoutingDecisionRepository routingDecisionRepository,
             RoutingEngine routingEngine,
             ProviderAdapterRegistry providerAdapterRegistry,
+            ProviderAvailabilityService providerAvailabilityService,
             CheckoutConfigStore checkoutConfigStore,
             IdempotencyService idempotencyService,
             ProviderHealthService providerHealthService,
-            ObjectMapper objectMapper,
-            AppProperties properties,
-            PaymentsMode paymentsMode
+            ObjectMapper objectMapper
     ) {
         this.merchantRepository = merchantRepository;
         this.merchantProviderConfigService = merchantProviderConfigService;
@@ -79,12 +75,11 @@ public class PaymentIntentService {
         this.routingDecisionRepository = routingDecisionRepository;
         this.routingEngine = routingEngine;
         this.providerAdapterRegistry = providerAdapterRegistry;
+        this.providerAvailabilityService = providerAvailabilityService;
         this.checkoutConfigStore = checkoutConfigStore;
         this.idempotencyService = idempotencyService;
         this.providerHealthService = providerHealthService;
         this.objectMapper = objectMapper;
-        this.properties = properties;
-        this.paymentsMode = paymentsMode;
     }
 
     @Transactional
@@ -120,7 +115,13 @@ public class PaymentIntentService {
     }
 
     @Transactional
-    public PaymentIntentCreated reroute(UUID merchantId, UUID paymentIntentId, String reason, String requestId) {
+    public PaymentIntentCreated reroute(
+            UUID merchantId,
+            UUID paymentIntentId,
+            String reason,
+            ProviderPreference providerPreference,
+            String requestId
+    ) {
         MerchantEntity merchant = merchantRepository.findById(merchantId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Merchant not found"));
 
@@ -140,14 +141,17 @@ public class PaymentIntentService {
         UUID newId = UUID.randomUUID();
         int attemptNumber = (int) count;
 
+        ProviderPreference preference = providerPreference == null ? ProviderPreference.AUTO : providerPreference;
         CreatePaymentIntentCommand cmd = new CreatePaymentIntentCommand(
                 existing.getAmountMinor(),
                 existing.getCurrency(),
                 existing.getDescription(),
-                ProviderPreference.AUTO
+                preference
         );
 
-        Set<PaymentProvider> excluded = Set.of(existing.getProvider());
+        Set<PaymentProvider> excluded = preference == ProviderPreference.AUTO
+                ? Set.of(existing.getProvider())
+                : Set.of();
         return createInternal(merchant, newId, rootId, attemptNumber, cmd, null, requestId, excluded);
     }
 
@@ -251,26 +255,23 @@ public class PaymentIntentService {
         if (preference == ProviderPreference.DEMO) {
             routing = demoRoutingResult(paymentIntentId, command.amountMinor(), currency);
         } else {
-            List<PaymentProvider> candidates = resolveAvailableProviders(merchant, excludedProviders);
+            ProviderAvailabilityService.ProviderStatus explicitStatus = null;
             if (preference != ProviderPreference.AUTO) {
                 PaymentProvider explicit = preference.toProvider();
-                if (!candidates.contains(explicit)) {
+                explicitStatus = providerAvailabilityService.getStatus(merchant.getId(), explicit);
+                if (explicitStatus == null || !explicitStatus.available()) {
+                    String reason = explicitStatus == null ? "NOT_AVAILABLE" : explicitStatus.reason();
                     throw new ApiException(
-                            HttpStatus.SERVICE_UNAVAILABLE,
-                            "Provider " + explicit + " not configured for merchant"
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            "Provider " + explicit + " not available (" + reason + ")"
                     );
                 }
             }
 
+            List<PaymentProvider> candidates = providerAvailabilityService.availableProviders(merchant.getId(), excludedProviders);
+
             if (candidates.isEmpty()) {
-                if (paymentsMode.isDemo()) {
-                    routing = demoRoutingResult(paymentIntentId, command.amountMinor(), currency);
-                } else {
-                    throw new ApiException(
-                            HttpStatus.SERVICE_UNAVAILABLE,
-                            "No payment providers configured for merchant. Configure providers or enable demo mode (PAYMENTS_MODE=demo)."
-                    );
-                }
+                routing = demoRoutingResult(paymentIntentId, command.amountMinor(), currency);
             } else {
                 routing = routingEngine.decide(
                         merchant,
@@ -332,7 +333,10 @@ public class PaymentIntentService {
                 if (excludedProviders != null) newExcluded.addAll(excludedProviders);
                 newExcluded.add(pi.getProvider());
                 try {
-                    List<PaymentProvider> fallbackCandidates = resolveAvailableProviders(merchant, java.util.Set.copyOf(newExcluded));
+                    List<PaymentProvider> fallbackCandidates = providerAvailabilityService.availableProviders(
+                            merchant.getId(),
+                            java.util.Set.copyOf(newExcluded)
+                    );
                     if (fallbackCandidates.isEmpty()) {
                         throw new ApiException(HttpStatus.BAD_GATEWAY, "No alternate providers available for fallback");
                     }
@@ -503,59 +507,10 @@ public class PaymentIntentService {
         return new RoutingEngine.RoutingResult(PaymentProvider.DEMO, "DEMO_MODE", json);
     }
 
-    private List<PaymentProvider> resolveAvailableProviders(MerchantEntity merchant, Set<PaymentProvider> excludedProviders) {
-        Set<PaymentProvider> supported = providerAdapterRegistry.registeredProviders();
-        List<PaymentProvider> ordered = List.of(
-                PaymentProvider.STRIPE,
-                PaymentProvider.ADYEN,
-                PaymentProvider.PAYPAL,
-                PaymentProvider.TRANSBANK
-        );
-        List<PaymentProvider> available = new java.util.ArrayList<>();
-        for (PaymentProvider provider : ordered) {
-            if (!supported.contains(provider)) continue;
-            if (excludedProviders != null && excludedProviders.contains(provider)) continue;
-            if (!isProviderAvailableForMerchant(merchant.getId(), provider)) continue;
-            available.add(provider);
-        }
-        return available;
-    }
-
-    private boolean isProviderAvailableForMerchant(UUID merchantId, PaymentProvider provider) {
-        Optional<MerchantProviderConfigService.MerchantProviderConfig> cfg = merchantProviderConfigService.find(merchantId, provider);
-        if (cfg.isPresent()) {
-            return cfg.get().enabled();
-        }
-        return isProviderConfiguredGlobally(provider);
-    }
-
-    private boolean isProviderConfiguredGlobally(PaymentProvider provider) {
-        return switch (provider) {
-            case STRIPE -> isStripeConfigured();
-            case ADYEN -> isAdyenConfigured();
-            case PAYPAL, TRANSBANK, DEMO -> false;
-        };
-    }
-
     private Map<String, String> resolveProviderConfig(UUID merchantId, PaymentProvider provider) {
         return merchantProviderConfigService.find(merchantId, provider)
                 .map(MerchantProviderConfigService.MerchantProviderConfig::config)
                 .orElse(Map.of());
-    }
-
-    private boolean isStripeConfigured() {
-        if (properties.providers() == null || properties.providers().stripe() == null) return false;
-        String secretKey = properties.providers().stripe().secretKey();
-        String publishableKey = properties.providers().stripe().publishableKey();
-        return secretKey != null && !secretKey.isBlank() && publishableKey != null && !publishableKey.isBlank();
-    }
-
-    private boolean isAdyenConfigured() {
-        if (properties.providers() == null || properties.providers().adyen() == null) return false;
-        var adyen = properties.providers().adyen();
-        return adyen.apiKey() != null && !adyen.apiKey().isBlank()
-                && adyen.merchantAccount() != null && !adyen.merchantAccount().isBlank()
-                && adyen.clientKey() != null && !adyen.clientKey().isBlank();
     }
 
     public record CreatePaymentIntentCommand(
