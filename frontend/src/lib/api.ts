@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-export type ProviderPreference = "AUTO" | "STRIPE" | "ADYEN" | "DEMO" | "PAYPAL" | "TRANSBANK";
-export type PaymentProvider = "STRIPE" | "ADYEN" | "DEMO" | "PAYPAL" | "TRANSBANK";
+export type ProviderPreference = "AUTO" | "STRIPE" | "ADYEN" | "MASTERCARD" | "DEMO" | "PAYPAL";
+export type PaymentProvider = "STRIPE" | "ADYEN" | "MASTERCARD" | "DEMO" | "PAYPAL";
 export type PaymentStatus =
   | "CREATED"
   | "REQUIRES_PAYMENT_METHOD"
@@ -23,7 +23,9 @@ export type MerchantDto = {
 export type ProviderConfigView = {
   provider: PaymentProvider;
   enabled: boolean;
+  configured: boolean;
   config: Record<string, string>;
+  missingFields?: string[];
   configurable: boolean;
 };
 
@@ -163,6 +165,35 @@ export async function disableMerchantProvider(jwt: string, merchantId: string, p
   }) as Promise<ProviderConfigView>;
 }
 
+export async function listProviderStatuses(jwt: string) {
+  return apiFetch("/api/providers", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${jwt}` }
+  }) as Promise<ProviderStatus[]>;
+}
+
+export async function getProviderConfig(jwt: string, provider: PaymentProvider) {
+  return apiFetch(`/api/providers/${provider}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${jwt}` }
+  }) as Promise<ProviderConfigView>;
+}
+
+export async function upsertProviderConfig(jwt: string, provider: PaymentProvider, req: ProviderConfigRequest) {
+  return apiFetch(`/api/providers/${provider}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${jwt}` },
+    body: JSON.stringify(req)
+  }) as Promise<ProviderConfigView>;
+}
+
+export async function disableProviderConfig(jwt: string, provider: PaymentProvider) {
+  return apiFetch(`/api/providers/${provider}/disable`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${jwt}` }
+  }) as Promise<ProviderConfigView>;
+}
+
 export async function listPaymentIntents(merchantApiKey: string) {
   return apiFetch("/api/payment-intents", {
     method: "GET",
@@ -203,20 +234,27 @@ export async function reroutePaymentIntent(
   merchantApiKey: string,
   id: string,
   reason: string,
-  providerPreference?: ProviderPreference
+  provider?: PaymentProvider
 ) {
   return apiFetch(`/api/payment-intents/${encodeURIComponent(id)}/reroute`, {
     method: "POST",
     headers: { "X-Api-Key": merchantApiKey },
-    body: JSON.stringify({ reason, providerPreference })
+    body: JSON.stringify({ reason, provider })
   }) as Promise<PaymentIntentCreateResponse>;
 }
 
-export async function demoAuthorizePaymentIntent(merchantApiKey: string, id: string, outcome?: "approved" | "declined") {
+export type DemoCardInput = {
+  cardNumber?: string;
+  expMonth?: string;
+  expYear?: string;
+  cvv?: string;
+};
+
+export async function demoAuthorizePaymentIntent(merchantApiKey: string, id: string, card?: DemoCardInput) {
   return apiFetch(`/api/payment-intents/${encodeURIComponent(id)}/demo/authorize`, {
     method: "POST",
     headers: { "X-Api-Key": merchantApiKey },
-    body: JSON.stringify({ outcome })
+    body: JSON.stringify(card || {})
   }) as Promise<PaymentIntentView>;
 }
 

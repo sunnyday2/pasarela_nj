@@ -13,12 +13,12 @@ import {
   listProviders,
   reroutePaymentIntent,
   type PaymentIntentWithConfigResponse,
-  type ProviderPreference,
+  type PaymentProvider,
   type ProviderStatus
 } from "@/lib/api";
 import { getMerchantApiKey, setMerchantApiKey } from "@/lib/storage";
 
-const ALL_PROVIDERS: ProviderPreference[] = ["AUTO", "STRIPE", "ADYEN", "DEMO", "PAYPAL", "TRANSBANK"];
+const ALL_PROVIDERS: (PaymentProvider | "AUTO")[] = ["AUTO", "STRIPE", "ADYEN", "MASTERCARD", "DEMO", "PAYPAL"];
 
 function statusLabel(status?: ProviderStatus) {
   if (!status) return "Desconocido";
@@ -40,6 +40,9 @@ function statusHint(status?: ProviderStatus) {
     case "UNHEALTHY":
       return "No saludable";
     default:
+      if (status.reason.startsWith("MISSING_FIELDS:")) {
+        return `Faltan ${status.reason.replace("MISSING_FIELDS:", "")}`;
+      }
       return status.reason;
   }
 }
@@ -50,7 +53,7 @@ function isSelectable(status?: ProviderStatus) {
   return status.configured && status.enabled && status.healthy;
 }
 
-export default function ReroutePage() {
+export default function RetryPage() {
   const router = useRouter();
   const params = useParams<{ paymentIntentId: string }>();
   const paymentIntentId = params.paymentIntentId;
@@ -59,7 +62,7 @@ export default function ReroutePage() {
   const [apiKeyInput, setApiKeyInput] = useState<string>("");
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [data, setData] = useState<PaymentIntentWithConfigResponse | null>(null);
-  const [selection, setSelection] = useState<ProviderPreference>("AUTO");
+  const [selection, setSelection] = useState<PaymentProvider | "AUTO">("AUTO");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -109,7 +112,8 @@ export default function ReroutePage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await reroutePaymentIntent(merchantApiKey, paymentIntentId, "USER_REROUTE", selection);
+      const provider = selection === "AUTO" ? undefined : selection;
+      const res = await reroutePaymentIntent(merchantApiKey, paymentIntentId, "USER_RETRY", provider);
       const isDemo = res.provider === "DEMO" || res.routingReasonCode === "DEMO_MODE";
       router.push(isDemo ? `/demo-checkout/${res.paymentIntentId}` : `/checkout/${res.paymentIntentId}`);
     } catch (err) {
@@ -126,7 +130,7 @@ export default function ReroutePage() {
     <div className="card" style={{ maxWidth: 760, margin: "0 auto" }}>
       <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Reroute · Elegir proveedor</h2>
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Reintentar · Elegir proveedor</h2>
           <div className="muted">
             Intent: <span className="pill">{paymentIntentId}</span>
           </div>
@@ -172,7 +176,7 @@ export default function ReroutePage() {
       <div style={{ height: 12 }} />
 
       <label className="label">Nuevo proveedor</label>
-      <select value={selection} onChange={(e) => setSelection(e.target.value as ProviderPreference)}>
+      <select value={selection} onChange={(e) => setSelection(e.target.value as PaymentProvider | "AUTO")}>
         {ALL_PROVIDERS.map((provider) => {
           if (provider === "AUTO") return <option key={provider} value={provider}>AUTO (recomendado)</option>;
           const status = providers.find((item) => item.provider === provider);
@@ -212,7 +216,7 @@ export default function ReroutePage() {
 
       <div className="row">
         <button className="primary" onClick={onConfirm} disabled={!merchantApiKey || loading}>
-          {loading ? "Reintentando..." : "Confirmar reroute"}
+          {loading ? "Reintentando..." : "Confirmar reintento"}
         </button>
         <Link href={`/checkout/${paymentIntentId}`}>
           <button disabled={loading}>Cancelar</button>

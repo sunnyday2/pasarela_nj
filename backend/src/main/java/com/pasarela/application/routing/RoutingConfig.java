@@ -19,8 +19,8 @@ public record RoutingConfig(
         EnumMap<PaymentProvider, Double> cost = new EnumMap<>(PaymentProvider.class);
         cost.put(PaymentProvider.STRIPE, 0.30);
         cost.put(PaymentProvider.ADYEN, 0.25);
+        cost.put(PaymentProvider.MASTERCARD, 0.28);
         cost.put(PaymentProvider.PAYPAL, 0.35);
-        cost.put(PaymentProvider.TRANSBANK, 0.28);
         return new RoutingConfig("AUTO", RoutingWeights.defaults(), cost);
     }
 }

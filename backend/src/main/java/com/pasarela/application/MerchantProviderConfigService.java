@@ -41,12 +41,12 @@ public class MerchantProviderConfigService {
                     List.of("apiKey", "merchantAccount", "clientKey"),
                     List.of("hmacKey", "environment")
             ),
+            PaymentProvider.MASTERCARD, new ProviderSchema(
+                    List.of("gatewayHost", "apiVersion", "merchantId", "apiPassword"),
+                    List.of()
+            ),
             PaymentProvider.PAYPAL, new ProviderSchema(
                     List.of("clientId", "clientSecret"),
-                    List.of("environment")
-            ),
-            PaymentProvider.TRANSBANK, new ProviderSchema(
-                    List.of("commerceCode", "apiKey"),
                     List.of("environment")
             )
     );

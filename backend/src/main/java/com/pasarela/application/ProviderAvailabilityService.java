@@ -7,7 +7,6 @@ package com.pasarela.application;
 
 import com.pasarela.application.routing.ProviderHealthService;
 import com.pasarela.application.routing.ProviderSnapshot;
-import com.pasarela.config.AppProperties;
 import com.pasarela.domain.model.CircuitState;
 import com.pasarela.domain.model.PaymentProvider;
 import org.springframework.stereotype.Service;
@@ -23,26 +22,26 @@ public class ProviderAvailabilityService {
     private static final List<PaymentProvider> ORDERED = List.of(
             PaymentProvider.STRIPE,
             PaymentProvider.ADYEN,
+            PaymentProvider.MASTERCARD,
             PaymentProvider.PAYPAL,
-            PaymentProvider.TRANSBANK,
             PaymentProvider.DEMO
     );
 
     private final ProviderAdapterRegistry providerAdapterRegistry;
     private final ProviderHealthService providerHealthService;
     private final MerchantProviderConfigService merchantProviderConfigService;
-    private final AppProperties properties;
+    private final ProviderConfigService providerConfigService;
 
     public ProviderAvailabilityService(
             ProviderAdapterRegistry providerAdapterRegistry,
             ProviderHealthService providerHealthService,
             MerchantProviderConfigService merchantProviderConfigService,
-            AppProperties properties
+            ProviderConfigService providerConfigService
     ) {
         this.providerAdapterRegistry = providerAdapterRegistry;
         this.providerHealthService = providerHealthService;
         this.merchantProviderConfigService = merchantProviderConfigService;
-        this.properties = properties;
+        this.providerConfigService = providerConfigService;
     }
 
     public List<ProviderStatus> listForMerchant(UUID merchantId) {
@@ -80,7 +79,7 @@ public class ProviderAvailabilityService {
         if (provider == PaymentProvider.DEMO) {
             return new ProviderStatus(provider, true, true, true, "DEMO");
         }
-        if (provider == PaymentProvider.PAYPAL || provider == PaymentProvider.TRANSBANK) {
+        if (provider == PaymentProvider.PAYPAL) {
             return new ProviderStatus(provider, false, false, false, "NOT_IMPLEMENTED");
         }
         if (!supported.contains(provider)) {
@@ -89,7 +88,10 @@ public class ProviderAvailabilityService {
 
         ProviderConfigState configState = resolveConfigState(merchantId, provider);
         if (!configState.configured()) {
-            return new ProviderStatus(provider, false, false, false, "NOT_CONFIGURED");
+            String reason = configState.missingFields().isEmpty()
+                    ? "NOT_CONFIGURED"
+                    : "MISSING_FIELDS:" + String.join(",", configState.missingFields());
+            return new ProviderStatus(provider, false, false, false, reason);
         }
         if (!configState.enabled()) {
             return new ProviderStatus(provider, true, false, false, "DISABLED");
@@ -101,35 +103,29 @@ public class ProviderAvailabilityService {
     }
 
     private ProviderConfigState resolveConfigState(UUID merchantId, PaymentProvider provider) {
-        Optional<MerchantProviderConfigService.MerchantProviderConfig> cfg = merchantProviderConfigService.find(merchantId, provider);
-        if (cfg.isPresent()) {
-            return new ProviderConfigState(true, cfg.get().enabled(), "MERCHANT");
+        if (merchantId != null) {
+            Optional<MerchantProviderConfigService.MerchantProviderConfig> cfg = merchantProviderConfigService.find(merchantId, provider);
+            if (cfg.isPresent()) {
+                List<String> missing = providerConfigService.missingRequiredFields(provider, cfg.get().config());
+                return new ProviderConfigState(missing.isEmpty(), cfg.get().enabled(), "MERCHANT", missing);
+            }
         }
 
-        boolean globalConfigured = switch (provider) {
-            case STRIPE -> isStripeConfigured();
-            case ADYEN -> isAdyenConfigured();
-            default -> false;
-        };
-        return new ProviderConfigState(globalConfigured, globalConfigured, "GLOBAL");
+        ProviderConfigService.EffectiveConfig effective = providerConfigService.resolveEffectiveConfig(provider);
+        return new ProviderConfigState(
+                effective.configured(),
+                effective.enabled(),
+                effective.source(),
+                effective.missingFields()
+        );
     }
 
-    private boolean isStripeConfigured() {
-        if (properties.providers() == null || properties.providers().stripe() == null) return false;
-        String secretKey = properties.providers().stripe().secretKey();
-        String publishableKey = properties.providers().stripe().publishableKey();
-        return secretKey != null && !secretKey.isBlank() && publishableKey != null && !publishableKey.isBlank();
-    }
-
-    private boolean isAdyenConfigured() {
-        if (properties.providers() == null || properties.providers().adyen() == null) return false;
-        var adyen = properties.providers().adyen();
-        return adyen.apiKey() != null && !adyen.apiKey().isBlank()
-                && adyen.merchantAccount() != null && !adyen.merchantAccount().isBlank()
-                && adyen.clientKey() != null && !adyen.clientKey().isBlank();
-    }
-
-    private record ProviderConfigState(boolean configured, boolean enabled, String source) {}
+    private record ProviderConfigState(
+            boolean configured,
+            boolean enabled,
+            String source,
+            List<String> missingFields
+    ) {}
 
     public record ProviderStatus(
             PaymentProvider provider,

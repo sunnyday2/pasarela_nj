@@ -10,15 +10,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   createMerchant,
-  disableMerchantProvider,
-  listMerchantProviders,
+  disableProviderConfig,
+  getProviderConfig,
   listMerchants,
   listPaymentIntents,
-  upsertMerchantProvider,
+  listProviderStatuses,
+  upsertProviderConfig,
   type MerchantDto,
   type PaymentIntentView,
   type PaymentProvider,
-  type ProviderConfigView
+  type ProviderConfigView,
+  type ProviderStatus
 } from "@/lib/api";
 import { clearJwt, getJwt, getMerchantApiKey, setMerchantApiKey } from "@/lib/storage";
 
@@ -34,8 +36,9 @@ export default function DashboardPage() {
 
   const [merchants, setMerchants] = useState<MerchantDto[]>([]);
   const [paymentIntents, setPaymentIntents] = useState<PaymentIntentView[]>([]);
-  const [selectedMerchantId, setSelectedMerchantId] = useState<string>("");
-  const [providerConfigs, setProviderConfigs] = useState<ProviderConfigView[]>([]);
+  const [providerStatuses, setProviderStatuses] = useState<ProviderStatus[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<PaymentProvider>("STRIPE");
+  const [providerConfig, setProviderConfig] = useState<ProviderConfigView | null>(null);
   const [providerInputs, setProviderInputs] = useState<Record<string, Record<string, string>>>({});
   const [providerError, setProviderError] = useState<string | null>(null);
 
@@ -65,10 +68,11 @@ export default function DashboardPage() {
       { key: "clientSecret", label: "Client secret", required: true },
       { key: "environment", label: "Environment" }
     ],
-    TRANSBANK: [
-      { key: "commerceCode", label: "Commerce code", required: true },
-      { key: "apiKey", label: "API key", required: true },
-      { key: "environment", label: "Environment" }
+    MASTERCARD: [
+      { key: "gatewayHost", label: "Gateway host", required: true },
+      { key: "apiVersion", label: "API version", required: true },
+      { key: "merchantId", label: "Merchant ID", required: true },
+      { key: "apiPassword", label: "API password", required: true }
     ],
     DEMO: []
   };
@@ -111,13 +115,13 @@ export default function DashboardPage() {
     }
   }
 
-  async function refreshProviderConfigs(merchantId: string) {
-    if (!jwt || !merchantId) return;
+  async function refreshProviderStatuses() {
+    if (!jwt) return;
     setLoadingProviders(true);
     setProviderError(null);
     try {
-      const configs = await listMerchantProviders(jwt, merchantId);
-      setProviderConfigs(configs);
+      const statuses = await listProviderStatuses(jwt);
+      setProviderStatuses(statuses);
     } catch (err) {
       setProviderError(err instanceof Error ? err.message : "Error cargando proveedores");
     } finally {
@@ -125,15 +129,30 @@ export default function DashboardPage() {
     }
   }
 
-  async function onSaveProvider(provider: PaymentProvider) {
-    if (!jwt || !selectedMerchantId) return;
+  async function refreshProviderConfig(provider: PaymentProvider) {
+    if (!jwt) return;
     setProviderError(null);
     setLoadingProviders(true);
     try {
-      const config = providerInputs[provider] || {};
-      const updated = await upsertMerchantProvider(jwt, selectedMerchantId, provider, { enabled: true, config });
-      setProviderConfigs((prev) => prev.map((p) => (p.provider === provider ? updated : p)));
-      setProviderInputs((prev) => ({ ...prev, [provider]: {} }));
+      const cfg = await getProviderConfig(jwt, provider);
+      setProviderConfig(cfg);
+    } catch (err) {
+      setProviderError(err instanceof Error ? err.message : "Error cargando configuración");
+    } finally {
+      setLoadingProviders(false);
+    }
+  }
+
+  async function onSaveProvider() {
+    if (!jwt) return;
+    setProviderError(null);
+    setLoadingProviders(true);
+    try {
+      const config = providerInputs[selectedProvider] || {};
+      const updated = await upsertProviderConfig(jwt, selectedProvider, { enabled: true, config });
+      setProviderConfig(updated);
+      setProviderInputs((prev) => ({ ...prev, [selectedProvider]: {} }));
+      await refreshProviderStatuses();
     } catch (err) {
       setProviderError(err instanceof Error ? err.message : "Error guardando proveedor");
     } finally {
@@ -141,13 +160,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function onDisableProvider(provider: PaymentProvider) {
-    if (!jwt || !selectedMerchantId) return;
+  async function onDisableProvider() {
+    if (!jwt) return;
     setProviderError(null);
     setLoadingProviders(true);
     try {
-      const updated = await disableMerchantProvider(jwt, selectedMerchantId, provider);
-      setProviderConfigs((prev) => prev.map((p) => (p.provider === provider ? updated : p)));
+      const updated = await disableProviderConfig(jwt, selectedProvider);
+      setProviderConfig(updated);
+      await refreshProviderStatuses();
     } catch (err) {
       setProviderError(err instanceof Error ? err.message : "Error deshabilitando proveedor");
     } finally {
@@ -166,15 +186,16 @@ export default function DashboardPage() {
   }, [merchantApiKey]);
 
   useEffect(() => {
-    if (!selectedMerchantId && merchants.length > 0) {
-      setSelectedMerchantId(merchants[0].id);
-    }
-  }, [merchants, selectedMerchantId]);
+    if (!jwt) return;
+    refreshProviderStatuses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jwt]);
 
   useEffect(() => {
-    if (selectedMerchantId) refreshProviderConfigs(selectedMerchantId);
+    if (!jwt || !selectedProvider) return;
+    refreshProviderConfig(selectedProvider);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMerchantId, jwt]);
+  }, [selectedProvider, jwt]);
 
   const selectedMerchantSummary = useMemo(() => {
     if (!merchantApiKey) return "No seleccionado";
@@ -311,62 +332,82 @@ export default function DashboardPage() {
           <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h2 style={{ marginTop: 0, marginBottom: 6 }}>Proveedores</h2>
-              <div className="muted">Configurar credenciales por merchant (JWT requerido).</div>
+              <div className="muted">Configurar credenciales globales (JWT requerido).</div>
             </div>
-            <button onClick={() => refreshProviderConfigs(selectedMerchantId)} disabled={!selectedMerchantId || loadingProviders}>
+            <button onClick={refreshProviderStatuses} disabled={loadingProviders}>
               Refrescar
             </button>
           </div>
 
           <div style={{ height: 10 }} />
 
-          <label className="label">Merchant</label>
-          <select value={selectedMerchantId} onChange={(e) => setSelectedMerchantId(e.target.value)}>
-            <option value="">Seleccionar merchant</option>
-            {merchants.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} — {m.id.slice(0, 8)}…
-              </option>
-            ))}
-          </select>
-
-          <div style={{ height: 12 }} />
-
-          {providerConfigs.length === 0 ? (
-            <p className="muted" style={{ marginBottom: 0 }}>
-              {loadingProviders ? "Cargando..." : "Seleccioná un merchant para ver proveedores."}
-            </p>
-          ) : (
-            <div className="row">
-              {providerConfigs.map((cfg) => {
-                const fields = PROVIDER_FIELDS[cfg.provider] || [];
-                const inputs = providerInputs[cfg.provider] || {};
-                return (
-                  <div className="col" key={cfg.provider}>
-                    <div className="card">
+          <div className="row" style={{ alignItems: "stretch" }}>
+            <div className="col" style={{ maxWidth: 280 }}>
+              <div className="muted" style={{ marginBottom: 8 }}>
+                Lista de providers
+              </div>
+              <div className="card">
+                {(["STRIPE", "ADYEN", "MASTERCARD", "PAYPAL", "DEMO"] as PaymentProvider[]).map((provider) => {
+                  const status = providerStatuses.find((item) => item.provider === provider);
+                  const configured = status?.configured ?? false;
+                  const enabled = status?.enabled ?? false;
+                  const healthy = status?.healthy ?? false;
+                  const selected = provider === selectedProvider;
+                  return (
+                    <button
+                      key={provider}
+                      onClick={() => setSelectedProvider(provider)}
+                      className={selected ? "primary" : ""}
+                      style={{ width: "100%", textAlign: "left", marginBottom: 8 }}
+                    >
                       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <div className="muted">Provider</div>
-                          <div className="pill">{cfg.provider}</div>
-                        </div>
-                        <div>
-                          <div className="muted">Estado</div>
-                          <div className={`pill ${cfg.enabled ? "status-success" : "status-failed"}`}>
-                            {cfg.enabled ? "Habilitado" : "Deshabilitado"}
-                          </div>
-                        </div>
-                        {cfg.configurable ? (
-                          <button onClick={() => onDisableProvider(cfg.provider)} disabled={loadingProviders || !cfg.enabled}>
-                            Deshabilitar
-                          </button>
-                        ) : (
-                          <span className="muted">Demo fijo</span>
-                        )}
+                        <span>{provider}</span>
+                        <span className={`pill ${enabled ? "status-success" : "status-failed"}`}>
+                          {enabled ? "On" : "Off"}
+                        </span>
                       </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {configured ? "Configurado" : "Incompleto"} · {healthy ? "Saludable" : "No saludable"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                      {cfg.configurable ? (
-                        <div style={{ marginTop: 10 }}>
-                          {fields.map((field) => (
+            <div className="col">
+              <div className="card">
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div className="muted">Provider</div>
+                    <div className="pill">{selectedProvider}</div>
+                  </div>
+                  {providerConfig ? (
+                    providerConfig.configurable ? (
+                      <button onClick={onDisableProvider} disabled={loadingProviders || !providerConfig.enabled}>
+                        Deshabilitar
+                      </button>
+                    ) : (
+                      <span className="muted">Demo fijo</span>
+                    )
+                  ) : (
+                    <span className="muted">Cargando...</span>
+                  )}
+                </div>
+
+                {providerConfig ? (
+                  <>
+                    {providerConfig.missingFields && providerConfig.missingFields.length > 0 ? (
+                      <p className="muted" style={{ marginBottom: 0, marginTop: 8 }}>
+                        Faltan: {providerConfig.missingFields.join(", ")}
+                      </p>
+                    ) : null}
+
+                    {providerConfig.configurable ? (
+                      <div style={{ marginTop: 10 }}>
+                        {(PROVIDER_FIELDS[selectedProvider] || []).map((field) => {
+                          const inputs = providerInputs[selectedProvider] || {};
+                          return (
                             <div key={field.key} style={{ marginBottom: 8 }}>
                               <label className="label">
                                 {field.label} {field.required ? "(requerido)" : ""}
@@ -376,28 +417,36 @@ export default function DashboardPage() {
                                 onChange={(e) =>
                                   setProviderInputs((prev) => ({
                                     ...prev,
-                                    [cfg.provider]: { ...(prev[cfg.provider] || {}), [field.key]: e.target.value }
+                                    [selectedProvider]: { ...(prev[selectedProvider] || {}), [field.key]: e.target.value }
                                   }))
                                 }
-                                placeholder={cfg.config[field.key] ? `Guardado: ${cfg.config[field.key]}` : "Actualizar"}
+                                placeholder={
+                                  providerConfig.config[field.key]
+                                    ? `Guardado: ${providerConfig.config[field.key]}`
+                                    : "Actualizar"
+                                }
                               />
                             </div>
-                          ))}
-                          <button
-                            className="primary"
-                            onClick={() => onSaveProvider(cfg.provider)}
-                            disabled={loadingProviders || !selectedMerchantId}
-                          >
-                            Guardar y habilitar
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+                          );
+                        })}
+                        <button className="primary" onClick={onSaveProvider} disabled={loadingProviders}>
+                          Guardar y habilitar
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
+                        DEMO no requiere configuración.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
+                    Cargando configuración...
+                  </p>
+                )}
+              </div>
             </div>
-          )}
+          </div>
 
           {providerError ? (
             <p className="status-failed" style={{ marginBottom: 0 }}>

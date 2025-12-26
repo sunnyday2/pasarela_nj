@@ -20,7 +20,7 @@ public record AppProperties(
 
     public record Crypto(String encryptionKeyBase64) {}
 
-    public record Providers(Stripe stripe, Adyen adyen) {
+    public record Providers(Stripe stripe, Adyen adyen, Mastercard mastercard) {
         public record Stripe(String secretKey, String publishableKey, String webhookSecret) {}
 
         public record Adyen(
@@ -30,6 +30,12 @@ public record AppProperties(
                 String hmacKey,
                 String environment
         ) {}
+
+        public record Mastercard(
+                String gatewayHost,
+                String apiVersion,
+                String merchantId,
+                String apiPassword
+        ) {}
     }
 }
-

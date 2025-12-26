@@ -74,7 +74,7 @@ public class PaymentIntentController {
                 resolved.merchantId(),
                 paymentIntentId,
                 req.reason(),
-                req.providerPreference(),
+                req.provider(),
                 requestId == null ? "n/a" : requestId
         );
         return PaymentIntentCreateResponse.from(created);
@@ -129,7 +129,7 @@ public class PaymentIntentController {
         return paymentIntentService.demoAuthorize(
                 resolved.merchantId(),
                 paymentIntentId,
-                req == null ? null : req.outcome(),
+                req == null ? null : req.cvv(),
                 requestId == null ? "n/a" : requestId
         );
     }
@@ -164,12 +164,17 @@ public class PaymentIntentController {
 
     public record RerouteRequest(
             @NotBlank @Size(max = 200) String reason,
-            ProviderPreference providerPreference
+            PaymentProvider provider
     ) {}
 
     public record RefundRequest(@NotBlank @Size(max = 200) String reason) {}
 
-    public record DemoAuthorizeRequest(String outcome) {}
+    public record DemoAuthorizeRequest(
+            String cardNumber,
+            String expMonth,
+            String expYear,
+            String cvv
+    ) {}
 
     public record PaymentIntentCreateResponse(
             UUID paymentIntentId,

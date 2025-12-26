@@ -62,9 +62,9 @@ Para desactivar demo en dev y usar Stripe/Adyen reales:
 APP_PAYMENTS_MODE=auto
 ```
 
-## Estado de proveedores (merchant)
+## Estado de proveedores
 
-Con `X-Api-Key`:
+Con `X-Api-Key` (merchant) o `Authorization: Bearer` (admin):
 
 ```bash
 GET /api/providers
@@ -76,16 +76,16 @@ Respuesta incluye `configured`, `enabled`, `healthy` y `reason`.
 
 - Checkout real: `/checkout/{id}`
 - Demo checkout: `/demo-checkout/{id}`
-- Reroute/selección de proveedor: `/checkout/{id}/reroute`
+- Reintento/selección de proveedor: `/checkout/{id}/retry`
 
-## Configurar proveedores por merchant (admin)
+## Configurar proveedores globales (admin)
 
 Endpoints admin (JWT):
 
 ```bash
-GET    /api/merchants/{merchantId}/providers
-PUT    /api/merchants/{merchantId}/providers/{provider}
-DELETE /api/merchants/{merchantId}/providers/{provider}
+GET  /api/providers/{provider}
+PUT  /api/providers/{provider}
+POST /api/providers/{provider}/disable
 ```
 
 Los valores se guardan encriptados (APP_ENCRYPTION_KEY_BASE64) y el backend devuelve los secretos enmascarados.

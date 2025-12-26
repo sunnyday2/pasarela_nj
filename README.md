@@ -15,7 +15,7 @@ El proveedor se decide **antes** de entregar `checkoutConfig` al frontend porque
 ## Fallbacks soportados
 
 - **Fallback instantáneo (automático)**: si falla `createSession`/`createPaymentIntent` por timeout/5xx/validación en el proveedor elegido, el backend reintenta con el otro proveedor y devuelve el `checkoutConfig` alternativo.
-- **Fallback con reintento del usuario**: si el pago falla dentro del proveedor (decline/3DS fail), el backend marca `FAILED` (por webhook) y el frontend redirige a **/checkout/{id}/reroute** para elegir proveedor. El endpoint acepta `providerPreference` opcional en `POST /api/payment-intents/{id}/reroute`.
+- **Fallback con reintento del usuario**: si el pago falla dentro del proveedor (decline/3DS fail), el backend marca `FAILED` (por webhook) y el frontend redirige a **/checkout/{id}/retry** para elegir proveedor. El endpoint acepta `provider` opcional en `POST /api/payment-intents/{id}/reroute`.
 
 ## Requisitos
 
@@ -49,17 +49,17 @@ npm run dev
 
 Ver `DEV.md` para Flyway repair, demo payments mode y troubleshooting de puertos.
 
-## Proveedores por merchant (admin)
+## Proveedores globales (admin)
 
 Endpoints protegidos con JWT admin:
 
-- `GET /api/merchants/{merchantId}/providers`
-- `PUT /api/merchants/{merchantId}/providers/{provider}`
-- `DELETE /api/merchants/{merchantId}/providers/{provider}`
+- `GET /api/providers/{provider}`
+- `PUT /api/providers/{provider}`
+- `POST /api/providers/{provider}/disable`
 
 El backend encripta la configuración y devuelve valores enmascarados al listar.
 
-## Estado de proveedores (merchant)
+## Estado de proveedores
 
 Con `X-Api-Key` (merchant):
 
@@ -69,10 +69,12 @@ Con `X-Api-Key` (merchant):
 
 En modo demo o con `providerPreference=DEMO` podés simular el flujo desde la UI:
 
-- `POST /api/payment-intents/{id}/demo/authorize` `{ "outcome": "approved|declined" }`
+- `POST /api/payment-intents/{id}/demo/authorize` `{ "cardNumber": "...", "expMonth": "MM", "expYear": "YY", "cvv": "123" }`
 - `POST /api/payment-intents/{id}/demo/cancel`
 
 UI demo: `/demo-checkout/{id}`
+
+Regla demo: `cvv=000` => rechazo.
 
 ### API base / CORS
 

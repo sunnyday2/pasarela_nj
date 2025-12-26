@@ -25,7 +25,6 @@ public class RoutingEngine {
     private static final Set<String> STRIPE_CURRENCIES = Set.of("USD", "EUR", "GBP");
     private static final Set<String> ADYEN_CURRENCIES = Set.of("USD", "EUR", "MXN");
     private static final Set<String> PAYPAL_CURRENCIES = Set.of("USD", "EUR", "GBP");
-    private static final Set<String> TRANSBANK_CURRENCIES = Set.of("USD", "EUR", "CLP");
 
     private final ProviderHealthReader providerHealthReader;
     private final ObjectMapper objectMapper;
@@ -48,7 +47,7 @@ public class RoutingEngine {
         RoutingConfig merchantConfig = parseConfig(merchant.getConfigJson());
 
         List<PaymentProvider> baseCandidates = (candidates == null || candidates.isEmpty())
-                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN)
+                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN, PaymentProvider.MASTERCARD)
                 : candidates;
 
         if (preference != null && preference != ProviderPreference.AUTO) {
@@ -108,7 +107,7 @@ public class RoutingEngine {
             List<PaymentProvider> candidates
     ) {
         List<PaymentProvider> baseCandidates = (candidates == null || candidates.isEmpty())
-                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN)
+                ? List.of(PaymentProvider.STRIPE, PaymentProvider.ADYEN, PaymentProvider.MASTERCARD)
                 : candidates;
         EnumMap<PaymentProvider, ProviderSnapshot> snapshots = new EnumMap<>(PaymentProvider.class);
         for (PaymentProvider provider : baseCandidates) {
@@ -240,8 +239,8 @@ public class RoutingEngine {
         return switch (provider) {
             case STRIPE -> STRIPE_CURRENCIES.contains(currency);
             case ADYEN -> ADYEN_CURRENCIES.contains(currency);
+            case MASTERCARD -> true;
             case PAYPAL -> PAYPAL_CURRENCIES.contains(currency);
-            case TRANSBANK -> TRANSBANK_CURRENCIES.contains(currency);
             case DEMO -> false;
         };
     }

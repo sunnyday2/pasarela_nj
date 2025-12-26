@@ -30,8 +30,11 @@ export default function DemoCheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
   const [pollingMsg, setPollingMsg] = useState<string | null>(null);
-  const [demoOutcome, setDemoOutcome] = useState<"approved" | "declined">("approved");
   const [demoProcessing, setDemoProcessing] = useState(false);
+  const [cardNumber, setCardNumber] = useState("");
+  const [expMonth, setExpMonth] = useState("");
+  const [expYear, setExpYear] = useState("");
+  const [cvv, setCvv] = useState("");
 
   const pollingStopAt = useRef<number | null>(null);
 
@@ -105,7 +108,12 @@ export default function DemoCheckoutPage() {
     setError(null);
     setDemoProcessing(true);
     try {
-      const res = await demoAuthorizePaymentIntent(merchantApiKey, paymentIntentId, demoOutcome);
+      const res = await demoAuthorizePaymentIntent(merchantApiKey, paymentIntentId, {
+        cardNumber,
+        expMonth,
+        expYear,
+        cvv
+      });
       updatePaymentIntent(res);
       await fetchOnce();
     } catch (err) {
@@ -139,7 +147,7 @@ export default function DemoCheckoutPage() {
     <div className="card">
       <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Demo checkout</h2>
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Pasarela Orchestrator – Demo checkout</h2>
           <div className="muted">
             Pasarela simulada · Intent: <span className="pill">{paymentIntentId}</span>
           </div>
@@ -192,13 +200,13 @@ export default function DemoCheckoutPage() {
               {polling ? <p className="muted">Polling estado…</p> : null}
               {pollingMsg ? <p className="muted">{pollingMsg}</p> : null}
 
-              {status === "FAILED" || status === "REQUIRES_PAYMENT_METHOD" ? (
+              {status === "FAILED" ? (
                 <div style={{ marginTop: 12 }}>
-                  <Link href={`/checkout/${paymentIntentId}/reroute`}>
+                  <Link href={`/checkout/${paymentIntentId}/retry`}>
                     <button className="danger">Intentar con otro proveedor</button>
                   </Link>
                   <p className="muted" style={{ marginBottom: 0 }}>
-                    El reroute crea un nuevo intent y checkout.
+                    El reintento crea un nuevo intent y checkout.
                   </p>
                 </div>
               ) : null}
@@ -255,26 +263,31 @@ export default function DemoCheckoutPage() {
               <div style={{ height: 12 }} />
 
               <label className="label">Número de tarjeta</label>
-              <input placeholder="4242 4242 4242 4242" />
+              <input value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="4242 4242 4242 4242" />
 
               <div className="row">
                 <div className="col">
                   <label className="label">Expiración (MM/YY)</label>
-                  <input placeholder="12/29" />
+                  <input
+                    value={`${expMonth}${expYear ? `/${expYear}` : ""}`}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\s/g, "");
+                      const parts = raw.split("/");
+                      setExpMonth(parts[0]?.slice(0, 2) || "");
+                      setExpYear(parts[1]?.slice(0, 2) || "");
+                    }}
+                    placeholder="12/29"
+                  />
                 </div>
                 <div className="col">
                   <label className="label">CVV</label>
-                  <input placeholder="123" />
+                  <input value={cvv} onChange={(e) => setCvv(e.target.value)} placeholder="123" />
                 </div>
               </div>
 
               <div style={{ height: 10 }} />
 
-              <label className="label">Resultado simulado</label>
-              <select value={demoOutcome} onChange={(e) => setDemoOutcome(e.target.value as "approved" | "declined")}>
-                <option value="approved">Aprobado</option>
-                <option value="declined">Rechazado</option>
-              </select>
+              <div className="muted">Regla demo: CVV 000 =&gt; rechazado.</div>
 
               <div style={{ height: 12 }} />
 

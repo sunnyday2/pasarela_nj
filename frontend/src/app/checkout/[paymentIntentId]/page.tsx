@@ -17,6 +17,7 @@ import {
 import { getMerchantApiKey, setMerchantApiKey } from "@/lib/storage";
 import { StripeCheckout } from "@/components/StripeCheckout";
 import { AdyenCheckout } from "@/components/AdyenCheckout";
+import { MastercardCheckout } from "@/components/MastercardCheckout";
 
 const FINAL_STATUSES = new Set(["SUCCEEDED", "FAILED", "REFUNDED"]);
 type AdyenEnv = "test" | "live" | "live-us" | "live-au" | "live-apse" | "live-in";
@@ -142,10 +143,7 @@ export default function CheckoutPage() {
     ? !providerStatus.configured || !providerStatus.enabled || !providerStatus.healthy
     : false;
   const shouldShowReroute =
-    status === "FAILED" ||
-    status === "REQUIRES_PAYMENT_METHOD" ||
-    providerUnavailable ||
-    Boolean(providersError);
+    status === "FAILED" || providerUnavailable || Boolean(error) || Boolean(providersError);
 
   useEffect(() => {
     if (!data) return;
@@ -212,7 +210,7 @@ export default function CheckoutPage() {
 
               {shouldShowReroute ? (
                 <div style={{ marginTop: 12 }}>
-                  <Link href={`/checkout/${paymentIntentId}/reroute`}>
+                  <Link href={`/checkout/${paymentIntentId}/retry`}>
                     <button className="danger">Intentar con otro proveedor</button>
                   </Link>
                   <p className="muted" style={{ marginBottom: 0 }}>
@@ -243,10 +241,21 @@ export default function CheckoutPage() {
                   sessionId={String(checkoutConfig.sessionId || "")}
                   sessionData={String(checkoutConfig.sessionData || "")}
                 />
+              ) : provider === "MASTERCARD" ? (
+                <MastercardCheckout
+                  scriptUrl={String(checkoutConfig.scriptUrl || "")}
+                  merchantId={String(checkoutConfig.merchantId || "")}
+                  sessionId={String(checkoutConfig.sessionId || "")}
+                  orderId={String(checkoutConfig.orderId || paymentIntentId)}
+                  amount={String(checkoutConfig.amount || "")}
+                  currency={String(checkoutConfig.currency || data?.paymentIntent.currency || "")}
+                  returnUrl={String(checkoutConfig.returnUrl || "")}
+                  successIndicator={typeof checkoutConfig.successIndicator === "string" ? checkoutConfig.successIndicator : undefined}
+                />
               ) : isDemo ? (
                 <p className="muted">Redirigiendo a demo checkout…</p>
               ) : (
-                <p className="muted">Checkout no disponible. Usá el reroute para elegir otro proveedor.</p>
+                <p className="muted">Checkout no disponible. Usá el reintento para elegir otro proveedor.</p>
               )}
             </div>
           </div>

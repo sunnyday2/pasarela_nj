@@ -99,7 +99,12 @@ class PaymentIntentDemoModeTest {
         assertNotNull(body);
         String paymentIntentId = String.valueOf(body.get("paymentIntentId"));
 
-        Map<String, Object> approveReq = Map.of("outcome", "approved");
+        Map<String, Object> approveReq = Map.of(
+                "cardNumber", "4242424242424242",
+                "expMonth", "12",
+                "expYear", "29",
+                "cvv", "123"
+        );
         ResponseEntity<Map> approved = restTemplate.postForEntity(
                 "/api/payment-intents/" + paymentIntentId + "/demo/authorize",
                 new HttpEntity<>(approveReq, headers),

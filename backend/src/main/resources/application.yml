@@ -57,6 +57,11 @@ app:
       clientKey: ${ADYEN_CLIENT_KEY:}
       hmacKey: ${ADYEN_HMAC_KEY:}
       environment: ${ADYEN_ENVIRONMENT:test}
+    mastercard:
+      gatewayHost: ${MASTERCARD_GATEWAY_HOST:}
+      apiVersion: ${MASTERCARD_API_VERSION:}
+      merchantId: ${MASTERCARD_MERCHANT_ID:}
+      apiPassword: ${MASTERCARD_API_PASSWORD:}
 
 springdoc:
   api-docs:

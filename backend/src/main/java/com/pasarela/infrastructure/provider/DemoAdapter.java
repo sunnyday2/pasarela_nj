@@ -50,6 +50,6 @@ public class DemoAdapter implements PaymentProviderAdapter {
         if (baseUrl == null || baseUrl.isBlank()) {
             baseUrl = "http://localhost:3000";
         }
-        return baseUrl.replaceAll("/$", "") + "/checkout/" + paymentIntentId + "?demo=1";
+        return baseUrl.replaceAll("/$", "") + "/demo-checkout/" + paymentIntentId;
     }
 }

@@ -82,8 +82,8 @@ public class ProviderHealthService implements ProviderHealthReader {
         List<PaymentProvider> ordered = List.of(
                 PaymentProvider.STRIPE,
                 PaymentProvider.ADYEN,
+                PaymentProvider.MASTERCARD,
                 PaymentProvider.PAYPAL,
-                PaymentProvider.TRANSBANK,
                 PaymentProvider.DEMO
         );
         Set<PaymentProvider> supported = providerAdapterRegistry.registeredProviders();

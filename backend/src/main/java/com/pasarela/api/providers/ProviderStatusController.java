@@ -10,6 +10,7 @@ import com.pasarela.application.ProviderAvailabilityService;
 import com.pasarela.domain.security.MerchantPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,15 +27,16 @@ public class ProviderStatusController {
     }
 
     @GetMapping
-    public List<ProviderAvailabilityService.ProviderStatus> list(@AuthenticationPrincipal MerchantPrincipal merchant) {
-        MerchantPrincipal resolved = requireMerchant(merchant);
-        return providerAvailabilityService.listForMerchant(resolved.merchantId());
-    }
-
-    private MerchantPrincipal requireMerchant(MerchantPrincipal merchant) {
-        if (merchant == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing/Invalid X-Api-Key (or X-Merchant-Api-Key)");
+    public List<ProviderAvailabilityService.ProviderStatus> list(
+            @AuthenticationPrincipal MerchantPrincipal merchant,
+            Authentication authentication
+    ) {
+        if (merchant != null) {
+            return providerAvailabilityService.listForMerchant(merchant.merchantId());
         }
-        return merchant;
+        if (authentication != null && authentication.isAuthenticated()) {
+            return providerAvailabilityService.listForMerchant(null);
+        }
+        throw new ApiException(HttpStatus.UNAUTHORIZED, "Missing/Invalid X-Api-Key (or X-Merchant-Api-Key)");
     }
 }

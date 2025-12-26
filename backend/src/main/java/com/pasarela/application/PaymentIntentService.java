@@ -46,6 +46,7 @@ public class PaymentIntentService {
 
     private final MerchantRepository merchantRepository;
     private final MerchantProviderConfigService merchantProviderConfigService;
+    private final ProviderConfigService providerConfigService;
     private final PaymentIntentRepository paymentIntentRepository;
     private final RoutingDecisionRepository routingDecisionRepository;
     private final RoutingEngine routingEngine;
@@ -59,6 +60,7 @@ public class PaymentIntentService {
     public PaymentIntentService(
             MerchantRepository merchantRepository,
             MerchantProviderConfigService merchantProviderConfigService,
+            ProviderConfigService providerConfigService,
             PaymentIntentRepository paymentIntentRepository,
             RoutingDecisionRepository routingDecisionRepository,
             RoutingEngine routingEngine,
@@ -71,6 +73,7 @@ public class PaymentIntentService {
     ) {
         this.merchantRepository = merchantRepository;
         this.merchantProviderConfigService = merchantProviderConfigService;
+        this.providerConfigService = providerConfigService;
         this.paymentIntentRepository = paymentIntentRepository;
         this.routingDecisionRepository = routingDecisionRepository;
         this.routingEngine = routingEngine;
@@ -119,7 +122,7 @@ public class PaymentIntentService {
             UUID merchantId,
             UUID paymentIntentId,
             String reason,
-            ProviderPreference providerPreference,
+            PaymentProvider provider,
             String requestId
     ) {
         MerchantEntity merchant = merchantRepository.findById(merchantId)
@@ -141,7 +144,7 @@ public class PaymentIntentService {
         UUID newId = UUID.randomUUID();
         int attemptNumber = (int) count;
 
-        ProviderPreference preference = providerPreference == null ? ProviderPreference.AUTO : providerPreference;
+        ProviderPreference preference = ProviderPreference.fromProvider(provider);
         CreatePaymentIntentCommand cmd = new CreatePaymentIntentCommand(
                 existing.getAmountMinor(),
                 existing.getCurrency(),
@@ -196,11 +199,12 @@ public class PaymentIntentService {
     }
 
     @Transactional
-    public PaymentIntentView demoAuthorize(UUID merchantId, UUID paymentIntentId, String outcome, String requestId) {
+    public PaymentIntentView demoAuthorize(UUID merchantId, UUID paymentIntentId, String cvv, String requestId) {
         PaymentIntentEntity pi = requireDemoIntent(merchantId, paymentIntentId);
         if (isFinalStatus(pi.getStatus())) return toView(pi);
 
-        boolean approved = outcome == null || outcome.isBlank() || "approved".equalsIgnoreCase(outcome);
+        String normalizedCvv = cvv == null ? "" : cvv.trim();
+        boolean approved = !normalizedCvv.equals("000");
 
         pi.setStatus(PaymentStatus.PROCESSING);
         paymentIntentRepository.save(pi);
@@ -213,7 +217,7 @@ public class PaymentIntentService {
                 pi.getId(),
                 approved,
                 "demo:" + (requestId == null ? "n/a" : requestId),
-                "{\"action\":\"authorize\",\"outcome\":\"" + (approved ? "approved" : "declined") + "\"}"
+                "{\"action\":\"authorize\",\"outcome\":\"" + (approved ? "approved" : "declined") + "\",\"rule\":\"cvv!=000\"}"
         );
 
         return toView(pi);
@@ -510,7 +514,7 @@ public class PaymentIntentService {
     private Map<String, String> resolveProviderConfig(UUID merchantId, PaymentProvider provider) {
         return merchantProviderConfigService.find(merchantId, provider)
                 .map(MerchantProviderConfigService.MerchantProviderConfig::config)
-                .orElse(Map.of());
+                .orElseGet(() -> providerConfigService.resolveEffectiveConfig(provider).config());
     }
 
     public record CreatePaymentIntentCommand(
