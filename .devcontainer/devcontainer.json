@@ -1,0 +1,53 @@
+{
+  "name": "Pasarela Orchestrator - Java 21 + Next.js",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "installMaven": "true"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+
+  "postCreateCommand": "cd frontend && npm install && cd .. && cp .env.example .env",
+
+  "forwardPorts": [3000, 8080],
+
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js Frontend",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Spring Boot Backend",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-boot-dev-pack",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ],
+      "settings": {
+        "java.configuration.runtimes": [
+          {
+            "name": "JavaSE-21",
+            "path": "/usr/local/sdkman/candidates/java/current"
+          }
+        ],
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      }
+    }
+  },
+
+  "remoteUser": "codespace"
+}
